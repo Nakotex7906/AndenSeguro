@@ -139,23 +139,23 @@ classDiagram
 Representa como interactuan los actores con el flujo de monitoreo, evaluacion del riesgo y protocolos de intervencion.
 
 ```mermaid
-usecaseDiagram
-    actor AIS as "Sistema de IA"
-    actor SEG as "Personal de Seguridad"
-    actor JEFE as "Jefe de Estacion"
-    actor PAS as "Pasajero en Riesgo"
+flowchart LR
+    AIS["Actor: Sistema de IA"]
+    SEG["Actor: Personal de Seguridad"]
+    JEFE["Actor: Jefe de Estacion"]
+    PAS["Actor: Pasajero en Riesgo"]
 
-    rectangle "Anden Seguro" {
-        (Monitorear anden en tiempo real) as UC1
-        (Detectar anomalias conductuales) as UC2
-        (Anonimizar puntos de pose\n sin uso de rostro) as UC3
-        (Calcular probabilidad de riesgo y_t) as UC4
-        (Clasificar nivel de alerta\n Verde/Amarillo/Naranja/Rojo) as UC5
-        (Enviar alerta nivel Amarillo) as UC6
-        (Enviar alerta nivel Naranja/Rojo) as UC7
-        (Ejecutar acercamiento amable) as UC8
-        (Activar protocolo de emergencia) as UC9
-    }
+    subgraph AS[Anden Seguro]
+        UC1([Monitorear anden en tiempo real])
+        UC2([Detectar anomalias conductuales])
+        UC3([Anonimizar puntos de pose\n sin uso de rostro])
+        UC4([Calcular probabilidad de riesgo y_t])
+        UC5([Clasificar nivel de alerta\n Verde/Amarillo/Naranja/Rojo])
+        UC6([Enviar alerta nivel Amarillo])
+        UC7([Enviar alerta nivel Naranja/Rojo])
+        UC8([Ejecutar acercamiento amable])
+        UC9([Activar protocolo de emergencia])
+    end
 
     AIS --> UC1
     AIS --> UC2
@@ -173,9 +173,9 @@ usecaseDiagram
     SEG --> UC8
     SEG --> UC9
 
-    UC4 ..> UC5 : <<include>>
-    UC5 ..> UC6 : <<extend>>
-    UC5 ..> UC7 : <<extend>>
-    UC7 ..> UC8 : <<include>>
-    UC7 ..> UC9 : <<extend>>
+    UC4 -. include .-> UC5
+    UC5 -. extend .-> UC6
+    UC5 -. extend .-> UC7
+    UC7 -. include .-> UC8
+    UC7 -. extend .-> UC9
 ```
