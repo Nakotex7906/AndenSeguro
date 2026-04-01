@@ -31,13 +31,31 @@ Tipos de commits sugeridos:
 - `refactor`: cambio en el código que no corrige un error ni añade una función (limpieza de code smells).
 - `test`: añadir o corregir pruebas.
 
+### Palabras Clave para Cerrar Tareas
+Si tu commit finaliza el trabajo de una tarea, incluye una de estas palabras justo antes de `#ID` para que ClickUp la marque como completada automaticamente:
+
+- `fix`, `fixes`, `fixed`
+- `close`, `closes`, `closed`
+- `resolve`, `resolves`, `resolved`
+
 Ejemplos prácticos para el equipo:
 
 - Ignacio (IA/Core): `feat(ia): implementacion de logica LSTM para deteccion de crisis #8642abc`
 - Guillermo (Backend): `feat(db): crear tabla IncidentLog para historial de incidencias #8642def`
 - Alonso (Frontend): `feat(ui): diseño de interfaz para Nivel Rojo con alerta sonora #8642ghi`
 
-## Diagrama de Clases
+Ejemplos para ClickUp:
+
+- Para vincular avance (sin cerrar): `feat(ia): configurando pesos iniciales de YOLOv5 #86e0p0a66`
+- Para finalizar y cerrar: `docs(readme): actualizacion de manual de automatizacion fix #86e0p0a66`
+- Otra forma de cierre: `feat(ui): dashboard de camaras en tiempo real closes #86e0p0a66`
+
+---
+
+## Diseño del Sistema
+
+### Diagrama de Clases
+Muestra la relacion entre los componentes principales de deteccion, analisis de riesgo y gestion de incidentes.
 
 ```mermaid
 classDiagram
@@ -69,14 +87,15 @@ classDiagram
         +save_to_db()
     }
 
-    PedestrianDetector ..> DeepSortTracker : detecta [cite: 28-29]
-    DeepSortTracker ..> Skeletonizer : rastrea [cite: 29-30]
-    Skeletonizer ..> RiskAnalyzer : alimenta [cite: 30-31]
+    PedestrianDetector ..> DeepSortTracker : detecta
+    DeepSortTracker ..> Skeletonizer : rastrea
+    Skeletonizer ..> RiskAnalyzer : alimenta
     RiskAnalyzer --> AlertManager : notifica si > 0.85 
-    AlertManager --> Incident : registra evento [cite: 69-71]
+    AlertManager --> Incident : registra evento
 ```
 
-## Diagrama de Casos de Uso
+### Diagrama de Casos de Uso
+Representa como interactuan los actores con el flujo de monitoreo, evaluacion del riesgo y protocolos de intervencion.
 
 ```mermaid
 graph LR
