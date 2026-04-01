@@ -40,3 +40,40 @@ Ejemplos prácticos para el equipo:
 Ignacio (IA/Core): feat(ia): implementacion de logica LSTM para deteccion de crisis #8642abc 
 Guillermo (Backend): feat(db): crear tabla IncidentLog para historial de incidencias #8642def 
 Alonso (Frontend): feat(ui): diseño de interfaz para Nivel Rojo con alerta sonora #8642ghi
+
+Diagrama De Clases 
+
+classDiagram
+    class PedestrianDetector {
+        -String model_path = "yolov5s.pt"
+        +detect(frame: Image) List~Detection~
+    }
+    class DeepSortTracker {
+        +update(detections: List) List~TrackedPerson~
+        -assign_id(person: Detection) int
+    }
+    class Skeletonizer {
+        +extract_keypoints(person: TrackedPerson) PoseVector
+    }
+    class RiskAnalyzer {
+        -float risk_threshold = 0.85
+        -LSTM_Model model
+        +predict_risk(sequence: List~PoseVector~) float
+    }
+    class AlertManager {
+        +process_risk(score: float)
+        -notify_security(level: String)
+        -trigger_automated_brake()
+    }
+    class Incident {
+        +String incident_id
+        +DateTime timestamp
+        +float risk_score
+        +save_to_db()
+    }
+
+    PedestrianDetector ..> DeepSortTracker : detecta [cite: 28-29]
+    DeepSortTracker ..> Skeletonizer : rastrea [cite: 29-30]
+    Skeletonizer ..> RiskAnalyzer : alimenta [cite: 30-31]
+    RiskAnalyzer --> AlertManager : notifica si > 0.85 
+    AlertManager --> Incident : registra evento [cite: 69-71]
