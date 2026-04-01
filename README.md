@@ -20,6 +20,25 @@ Diseñar e implementar un sistema de monitoreo inteligente basado en cámaras de
 
 ---
 
+## Flujo de Trabajo con GitFlow
+
+Para el desarrollo del proyecto utilizaremos el modelo GitFlow.
+
+- Rama estable de produccion: `main`.
+- Rama de integracion del desarrollo: `dev`.
+- Ramas de funcionalidad: `feature/<nombre-funcionalidad>` creadas desde `dev`.
+- Ramas de release: `release/<version>` para estabilizacion previa a `main`.
+- Ramas de hotfix: `hotfix/<descripcion>` creadas desde `main` para correcciones urgentes.
+
+Reglas operativas:
+
+- Todo trabajo diario se integra primero en `dev` via Pull Request.
+- No se trabaja directamente sobre `main`.
+- Cada PR debe incluir descripcion clara, pruebas ejecutadas y referencia de tarea (`#ID`).
+- Los merges a `main` se realizan mediante `release/*` o `hotfix/*` segun corresponda.
+
+---
+
 ## Estándar de Commits (Conventional Commits + ID)
 Utilizaremos el formato `<tipo>(<alcance>): <descripción> #<ID_Tarea>` para mantener un historial de commits claro y organizado, facilitando la trazabilidad de los cambios relacionados con cada tarea del proyecto.
 
