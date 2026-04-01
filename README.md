@@ -26,9 +26,13 @@ Utilizaremos el formato <tipo>(<alcance>): <descripción> #<ID_Tarea>. Esto perm
 Tipos de Commits sugeridos:
 
 feat: Una nueva funcionalidad (ej. el algoritmo de detección). 
+
 fix: Corrección de un error o bug. 
+
 docs: Cambios solo en la documentación o Javadoc.
+
 refactor: Cambio en el código que no corrige un error ni añade una función (limpieza de code smells).
+
 test: Añadir o corregir pruebas.
 
 Ejemplos prácticos para el equipo:
