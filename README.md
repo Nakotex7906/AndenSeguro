@@ -20,29 +20,26 @@ Diseñar e implementar un sistema de monitoreo inteligente basado en cámaras de
 
 ---
 
-El Estándar de Commits (Conventional Commits + ID)
-Utilizaremos el formato <tipo>(<alcance>): <descripción> #<ID_Tarea>. Esto permite que, al hacer el push, la actividad aparezca automáticamente en la tarea de ClickUp.
+## Estándar de Commits (Conventional Commits + ID)
+Utilizaremos el formato `<tipo>(<alcance>): <descripción> #<ID_Tarea>`. Esto permite que, al hacer push, la actividad aparezca automáticamente en la tarea de ClickUp.
 
-Tipos de Commits sugeridos:
+Tipos de commits sugeridos:
 
-feat: Una nueva funcionalidad (ej. el algoritmo de detección). 
-
-fix: Corrección de un error o bug. 
-
-docs: Cambios solo en la documentación o Javadoc.
-
-refactor: Cambio en el código que no corrige un error ni añade una función (limpieza de code smells).
-
-test: Añadir o corregir pruebas.
+- `feat`: una nueva funcionalidad (ej. el algoritmo de detección).
+- `fix`: corrección de un error o bug.
+- `docs`: cambios solo en la documentación o Javadoc.
+- `refactor`: cambio en el código que no corrige un error ni añade una función (limpieza de code smells).
+- `test`: añadir o corregir pruebas.
 
 Ejemplos prácticos para el equipo:
 
-Ignacio (IA/Core): feat(ia): implementacion de logica LSTM para deteccion de crisis #8642abc 
-Guillermo (Backend): feat(db): crear tabla IncidentLog para historial de incidencias #8642def 
-Alonso (Frontend): feat(ui): diseño de interfaz para Nivel Rojo con alerta sonora #8642ghi
+- Ignacio (IA/Core): `feat(ia): implementacion de logica LSTM para deteccion de crisis #8642abc`
+- Guillermo (Backend): `feat(db): crear tabla IncidentLog para historial de incidencias #8642def`
+- Alonso (Frontend): `feat(ui): diseño de interfaz para Nivel Rojo con alerta sonora #8642ghi`
 
-Diagrama De Clases 
+## Diagrama de Clases
 
+```mermaid
 classDiagram
     class PedestrianDetector {
         -String model_path = "yolov5s.pt"
@@ -77,3 +74,36 @@ classDiagram
     Skeletonizer ..> RiskAnalyzer : alimenta [cite: 30-31]
     RiskAnalyzer --> AlertManager : notifica si > 0.85 
     AlertManager --> Incident : registra evento [cite: 69-71]
+```
+
+## Diagrama de Casos de Uso
+
+```mermaid
+graph LR
+    subgraph "Andén Seguro (Sistema de Monitoreo)"
+        UC1(Monitoreo de Cámaras en Tiempo Real)
+        UC2(Detección de Patrones de Riesgo)
+        UC3(Generación de Alertas Escalonadas)
+        UC4(Ejecución de Protocolos de Intervención)
+        UC5(Gestión de Historial de Incidencias)
+        UC6(Anonimización de Datos)
+    end
+
+    AI[((Sistema de IA (YOLO/LSTM)))]
+    P((Pasajero en Riesgo))
+    S((Personal de Seguridad))
+    E((Equipos de Emergencia))
+    J((Jefe de Estación))
+
+    %% Interacciones
+    AI --> UC1
+    AI --> UC2
+    P -.->|Identificado por comportamiento| UC2
+    UC2 --> UC3
+    UC3 -->|Nivel Amarillo| J
+    UC3 -->|Nivel Naranja/Rojo| S
+    S --> UC4
+    UC4 --> E
+    AI --> UC5
+    AI --> UC6
+```
