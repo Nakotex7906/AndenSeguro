@@ -21,34 +21,21 @@ Diseñar e implementar un sistema de monitoreo inteligente basado en cámaras de
 ---
 
 ## Estándar de Commits (Conventional Commits + ID)
-Utilizaremos el formato `<tipo>(<alcance>): <descripción> #<ID_Tarea>`. Esto permite que, al hacer push, la actividad aparezca automáticamente en la tarea de ClickUp.
+Utilizaremos el formato `<tipo>(<alcance>): <descripción> #<ID_Tarea>` para mantener un historial de commits claro y organizado, facilitando la trazabilidad de los cambios relacionados con cada tarea del proyecto.
 
 Tipos de commits sugeridos:
 
 - `feat`: una nueva funcionalidad (ej. el algoritmo de detección).
 - `fix`: corrección de un error o bug.
-- `docs`: cambios solo en la documentación o Javadoc.
+- `docs`: cambios solo en la documentación
 - `refactor`: cambio en el código que no corrige un error ni añade una función (limpieza de code smells).
 - `test`: añadir o corregir pruebas.
-
-### Palabras Clave para Cerrar Tareas
-Si tu commit finaliza el trabajo de una tarea, incluye una de estas palabras justo antes de `#ID` para que ClickUp la marque como completada automaticamente:
-
-- `fix`, `fixes`, `fixed`
-- `close`, `closes`, `closed`
-- `resolve`, `resolves`, `resolved`
 
 Ejemplos prácticos para el equipo:
 
 - Ignacio (IA/Core): `feat(ia): implementacion de logica LSTM para deteccion de crisis #8642abc`
 - Guillermo (Backend): `feat(db): crear tabla IncidentLog para historial de incidencias #8642def`
 - Alonso (Frontend): `feat(ui): diseño de interfaz para Nivel Rojo con alerta sonora #8642ghi`
-
-Ejemplos para ClickUp:
-
-- Para vincular avance (sin cerrar): `feat(ia): configurando pesos iniciales de YOLOv5 #86e0p0a66`
-- Para finalizar y cerrar: `docs(readme): actualizacion de manual de automatizacion fix #86e0p0a66`
-- Otra forma de cierre: `feat(ui): dashboard de camaras en tiempo real closes #86e0p0a66`
 
 ---
 
