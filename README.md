@@ -60,69 +60,122 @@ Muestra la relacion entre los componentes principales de deteccion, analisis de 
 ```mermaid
 classDiagram
     class PedestrianDetector {
-        -String model_path = "yolov5s.pt"
-        +detect(frame: Image) List~Detection~
-    }
-    class DeepSortTracker {
-        +update(detections: List) List~TrackedPerson~
-        -assign_id(person: Detection) int
-    }
-    class Skeletonizer {
-        +extract_keypoints(person: TrackedPerson) PoseVector
-    }
-    class RiskAnalyzer {
-        -float risk_threshold = 0.85
-        -LSTM_Model model
-        +predict_risk(sequence: List~PoseVector~) float
-    }
-    class AlertManager {
-        +process_risk(score: float)
-        -notify_security(level: String)
-        -trigger_automated_brake()
-    }
-    class Incident {
-        +String incident_id
-        +DateTime timestamp
-        +float risk_score
-        +save_to_db()
+        -String modelPath
+        +detectPedestrians(frame: Frame) List~Detection~
+        +filterNonPersonObjects(detections: List~Detection~) List~Detection~
     }
 
-    PedestrianDetector ..> DeepSortTracker : detecta
-    DeepSortTracker ..> Skeletonizer : rastrea
-    Skeletonizer ..> RiskAnalyzer : alimenta
-    RiskAnalyzer --> AlertManager : notifica si > 0.85 
-    AlertManager --> Incident : registra evento
+    class MotionTracker {
+        -int maxAge
+        +trackObjects(detections: List~Detection~) List~Track~
+        +predictTrajectory(track: Track) Trajectory
+    }
+
+    class PoseExtractor {
+        -Boolean faceLandmarksDisabled
+        +extractSkeleton(track: Track) SkeletonPoints
+        +anonymizeData(points: SkeletonPoints) SkeletonPoints
+    }
+
+    class RiskEngine {
+        -float alertThreshold = 0.85
+        -String lstmModelVersion
+        +predictRisk(sequence: List~SkeletonPoints~) float
+        +calculateEscalationLevel(riskScore: float) AlertLevel
+        +triggerEscalation(level: AlertLevel, context: RiskContext) AlertEvent
+    }
+
+    class CameraController {
+        +startStream(cameraId: String) StreamSession
+        +stopStream(cameraId: String) void
+        +getFrame(cameraId: String) Frame
+    }
+
+    class AlertController {
+        -WebSocketManager wsManager
+        +publishAlert(event: AlertEvent) void
+        +broadcastLevel(level: AlertLevel) void
+        +subscribeClient(clientId: String) void
+    }
+
+    class IncidentService {
+        -IncidentRepository repository
+        +createIncident(event: AlertEvent) Incident
+        +saveIncident(incident: Incident) void
+        +getIncidentHistory(stationId: String) List~Incident~
+    }
+
+    class MonitoringDashboard {
+        +renderLiveCameras() void
+        +displayRiskLevel(level: AlertLevel) void
+        +acknowledgeAlert(alertId: String) void
+    }
+
+    class AlertNotification {
+        +showAlert(event: AlertEvent) void
+        +playAlarm(level: AlertLevel) void
+        +confirmReception(userId: String) void
+    }
+
+    class IncidentHistory {
+        +loadIncidents(stationId: String) List~Incident~
+        +filterByLevel(level: AlertLevel) List~Incident~
+        +exportReport() File
+    }
+
+    PedestrianDetector --> MotionTracker : detections
+    MotionTracker --> PoseExtractor : active tracks
+    PoseExtractor --> RiskEngine : anonymized skeleton sequence
+    CameraController --> PedestrianDetector : live frames
+    RiskEngine --> AlertController : AlertEvent
+    AlertController --> IncidentService : persist request
+    IncidentService --> IncidentHistory : query incidents
+    AlertController --> AlertNotification : websocket push
+    MonitoringDashboard --> AlertNotification : renders
+    MonitoringDashboard --> IncidentHistory : consults
 ```
 
 ### Diagrama de Casos de Uso
 Representa como interactuan los actores con el flujo de monitoreo, evaluacion del riesgo y protocolos de intervencion.
 
 ```mermaid
-graph LR
-    subgraph "Andén Seguro (Sistema de Monitoreo)"
-        UC1(Monitoreo de Cámaras en Tiempo Real)
-        UC2(Detección de Patrones de Riesgo)
-        UC3(Generación de Alertas Escalonadas)
-        UC4(Ejecución de Protocolos de Intervención)
-        UC5(Gestión de Historial de Incidencias)
-        UC6(Anonimización de Datos)
-    end
+usecaseDiagram
+    actor AIS as "Sistema de IA"
+    actor SEG as "Personal de Seguridad"
+    actor JEFE as "Jefe de Estacion"
+    actor PAS as "Pasajero en Riesgo"
 
-    AI[((Sistema de IA (YOLO/LSTM)))]
-    P((Pasajero en Riesgo))
-    S((Personal de Seguridad))
-    E((Equipos de Emergencia))
-    J((Jefe de Estación))
+    rectangle "Anden Seguro" {
+        (Monitorear anden en tiempo real) as UC1
+        (Detectar anomalias conductuales) as UC2
+        (Anonimizar puntos de pose\n sin uso de rostro) as UC3
+        (Calcular probabilidad de riesgo y_t) as UC4
+        (Clasificar nivel de alerta\n Verde/Amarillo/Naranja/Rojo) as UC5
+        (Enviar alerta nivel Amarillo) as UC6
+        (Enviar alerta nivel Naranja/Rojo) as UC7
+        (Ejecutar acercamiento amable) as UC8
+        (Activar protocolo de emergencia) as UC9
+    }
 
-    %% Interacciones
-    AI --> UC1
-    AI --> UC2
-    P -.->|Identificado por comportamiento| UC2
-    UC2 --> UC3
-    UC3 -->|Nivel Amarillo| J
-    UC3 -->|Nivel Naranja/Rojo| S
-    S --> UC4
-    UC4 --> E
-    AI --> UC5
-    AI --> UC6
+    AIS --> UC1
+    AIS --> UC2
+    AIS --> UC3
+    AIS --> UC4
+    AIS --> UC5
+    AIS --> UC6
+    AIS --> UC7
+
+    PAS --> UC2
+    PAS --> UC1
+
+    JEFE --> UC6
+    SEG --> UC7
+    SEG --> UC8
+    SEG --> UC9
+
+    UC4 ..> UC5 : <<include>>
+    UC5 ..> UC6 : <<extend>>
+    UC5 ..> UC7 : <<extend>>
+    UC7 ..> UC8 : <<include>>
+    UC7 ..> UC9 : <<extend>>
 ```
