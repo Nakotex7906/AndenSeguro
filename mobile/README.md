@@ -1,50 +1,108 @@
-# Welcome to your Expo app 👋
+# Andén Seguro - Mobile (App móvil)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicación móvil para personal operativo y dispositivos móviles del proyecto Andén Seguro. Permite recibir alertas en tiempo real, visualizar información resumida de incidentes y confirmar ack/instrucciones desde campo.
 
-## Get started
+## Objetivo
 
-1. Install dependencies
+- Entregar una interfaz ligera y ágil para que el personal de campo reciba y gestione alertas (Naranja/Rojo).
+- Permitir confirmación/aceptación de protocolos y envío rápido de contexto al backend.
 
-   ```bash
-   npm install
-   ```
+## Principios del módulo
 
-2. Start the app
+- Alta disponibilidad y baja latencia en notificaciones.
+- Privacidad por diseño: no mostrar ni persistir rostros ni información sensible.
+- UX clara y priorización de acciones críticas (ack, contacto, escalado).
 
-   ```bash
-   npx expo start
-   ```
+## Stack principal
 
-In the output, you'll find options to open the app in a
+- Expo (Router) + React Native + TypeScript
+- Eslint + Prettier
+- Estado: Context/Zustand (según módulo) y hooks compartidos
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Estructura recomendada
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+mobile/
+├── app/             # Rutas y pantallas (file-based routing)
+├── components/      # Componentes reutilizables
+├── assets/          # Imágenes y recursos estáticos
+├── hooks/           # Hooks específicos de la app
+├── constants/       # Temas, valores por defecto
+├── scripts/         # Scripts útiles (reset, builds locales)
+└── README.md
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Dependencias y reglas de uso
 
-## Learn more
+| Dependencia | Uso | Regla clave |
+| --- | --- | --- |
+| `expo` / `expo-router` | Router y runtime multiplataforma | Mantener la versión de Expo consistente con docs del equipo |
+| `react-native` | UI nativa multiplataforma | Evitar uso de APIs de plataforma sin feature-flag |
+| `typescript` | Tipado estático | Evitar `any` en módulos compartidos |
+| `eslint` + `prettier` | Calidad y formato | Ejecutar `npm run lint` antes de PR |
 
-To learn more about developing your project with Expo, look at the following resources:
+### Privacidad
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- No subir ni almacenar imágenes o video con rostros. La app debe mostrar solo metadatos de incidentes (nivel, estación, timestamp, id).
 
-## Join the community
+## Estándares de ingeniería
 
-Join our community of developers creating universal apps.
+- TypeScript estricto donde sea posible.
+- Componentes pequeños y con props tipadas.
+- Hooks con tests unitarios cuando su lógica es compleja.
+- Cero errores de lint en PRs.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Commits (Convencional + ID)
+
+Formato del repo:
+
+```text
+<tipo>(<alcance>): <descripción> #<ID_Tarea>
+```
+
+Tipos habituales:
+
+- `feat`, `fix`, `docs`, `refactor`, `test`.
+
+Ejemplos:
+
+```text
+feat(mobile): pantalla de alerta en vivo #86e0p0mbl
+fix(mobile): corregir bug de navegación en tabs #86e0p0mbl
+```
+
+## Puesta en marcha local
+
+Recomendado: usar Node 18+ y npm o yarn.
+
+```bash
+cd mobile
+npm install
+# iniciar Metro / Expo
+npx expo start
+```
+
+Opciones de ejecución:
+
+- Abrir en Expo Go (dispositivo físico)
+- Usar emulador Android / iOS desde el output de `expo start`
+- Crear un development build para funciones nativas con `eas build --profile development` (si configurado)
+
+## Build de producción
+
+Si se requiere build nativo, usar EAS Build (configurar `eas.json`):
+
+```bash
+# ejemplo (requiere configurar cuenta Expo + EAS)
+eas build --platform all --profile production
+```
+
+## Testing y Quality
+
+- Ejecutar linters y formateo antes de PR:
+
+```bash
+npm run lint
+npx prettier --write .
+```
+
