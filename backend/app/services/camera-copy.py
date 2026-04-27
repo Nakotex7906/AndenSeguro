@@ -6,7 +6,6 @@ import requests
 from ultralytics import YOLO
 from dotenv import load_dotenv
 
-# Cargar variables de entorno (.env debe estar en la misma carpeta o raíz)
 load_dotenv()
 
 # Configuración de la API de Ezviz
@@ -18,7 +17,7 @@ BASE_URL   = os.getenv("BASE_URL", "https://isaopen.ezvizlife.com")
 CONF_THRESHOLD = 0.5
 CONFIG_FILE = "config.json"
 
-# Estado de la configuración de zonas
+# Estado de la configuración de zonas (seguro, riesgo, peligro)
 config_mode = 'YELLOW'
 yellow_points = []
 red_points = []
@@ -133,7 +132,6 @@ def main():
     cap = cv2.VideoCapture(stream_url)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-    # Nombres de ventana sin tilde para evitar el bug de clics de OpenCV en Windows
     cv2.namedWindow("AndenSeguro - Deteccion")
     cv2.setMouseCallback("AndenSeguro - Deteccion", mouse_click)
 
@@ -200,4 +198,4 @@ def main():
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    main()
+    main() 
