@@ -3,12 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
+ "scripts": {
+  "dev": "vite",
+  "build": "tsc -b && vite build",
+  "lint": "eslint .",
+  "preview": "vite preview",
+  "prettier": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
+  "prettier:check": "prettier --check \"src/**/*.{ts,tsx,css,html}\""
+},
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.2.2",
@@ -33,6 +35,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-simple-import-sort": "^12.1.1",
