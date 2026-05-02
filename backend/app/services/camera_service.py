@@ -14,7 +14,7 @@ class CameraService:
         self.config_file = "config.json"
         self.conf_threshold = 0.5
         
-        # Estado de zonas
+        # Estado de zonas (Ahora se guardan como porcentajes de dimensiones 0.0 a 1.0)
         self.yellow_points = []
         self.red_points = []
         self.load_config()
@@ -71,12 +71,18 @@ class CameraService:
             success, frame = cap.read()
             if not success:
                 break
+                
+            h, w = frame.shape[:2]
+
+            # Convertir porcentajes guardados a píxeles absolutos reales del frame
+            abs_yellow = [(int(p[0]*w), int(p[1]*h)) for p in self.yellow_points] if self.yellow_points else []
+            abs_red = [(int(p[0]*w), int(p[1]*h)) for p in self.red_points] if self.red_points else []
 
             # 1. Dibujar Zonas (Polígonos)
-            if self.yellow_points and self.red_points:
+            if abs_yellow and abs_red:
                 overlay = frame.copy()
-                pts_y = np.array(self.yellow_points, np.int32)
-                pts_r = np.array(self.red_points, np.int32)
+                pts_y = np.array(abs_yellow, np.int32)
+                pts_r = np.array(abs_red, np.int32)
                 
                 cv2.fillPoly(overlay, [pts_y], (0, 215, 255))
                 cv2.fillPoly(overlay, [pts_r], (0, 0, 255))
@@ -93,8 +99,8 @@ class CameraService:
                     feet = ( (x1 + x2) // 2, y2 )
                     
                     # Evaluación de posición
-                    in_red = cv2.pointPolygonTest(np.array(self.red_points, np.int32), feet, False) >= 0 if self.red_points else False
-                    in_yellow = cv2.pointPolygonTest(np.array(self.yellow_points, np.int32), feet, False) >= 0 if self.yellow_points else False
+                    in_red = cv2.pointPolygonTest(np.array(abs_red, np.int32), feet, False) >= 0 if abs_red else False
+                    in_yellow = cv2.pointPolygonTest(np.array(abs_yellow, np.int32), feet, False) >= 0 if abs_yellow else False
                     
                     color, label = (0, 255, 0), "SEGURO"
                     if in_red:

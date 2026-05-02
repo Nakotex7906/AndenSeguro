@@ -1,8 +1,10 @@
-import type { ReactElement } from 'react'
+import { useState, useRef, type ReactElement, type MouseEvent } from 'react'
 
 import { Panel } from '../components/dashboard/Panel'
 import { useIncidentAlerts } from '../hooks/useIncidentAlerts'
 import { useLiveCameraOverview } from '../hooks/useLiveCameraOverview'
+
+type Point = { x: number; y: number }
 
 /**
  * Renderiza la vista de monitoreo de cámara con la alerta activa.
@@ -11,6 +13,69 @@ import { useLiveCameraOverview } from '../hooks/useLiveCameraOverview'
 export function LiveCameraPage(): ReactElement | null {
   const { error: alertError } = useIncidentAlerts()
   const { error: cameraError } = useLiveCameraOverview()
+
+  // Estados para configuración de zonas
+  const [isConfiguring, setIsConfiguring] = useState(false)
+  const [configMode, setConfigMode] = useState<'YELLOW' | 'RED' | 'DONE'>('YELLOW')
+  const [yellowPoints, setYellowPoints] = useState<Point[]>([])
+  const [redPoints, setRedPoints] = useState<Point[]>([])
+  
+  // Referencia a div para calcular posiciones relativas
+  const overlayRef = useRef<HTMLDivElement>(null)
+
+  const handleOverlayClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (!isConfiguring || configMode === 'DONE' || !overlayRef.current) return
+
+    // Calcular el porcentaje respecto a las coordenadas del overlay superpuesto
+    const rect = overlayRef.current.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    const y = (e.clientY - rect.top) / rect.height
+
+    if (configMode === 'YELLOW') {
+      setYellowPoints((prev) => [...prev, { x, y }])
+    } else if (configMode === 'RED') {
+      setRedPoints((prev) => [...prev, { x, y }])
+    }
+  }
+
+  const handleNextStep = () => {
+    if (configMode === 'YELLOW' && yellowPoints.length >= 3) {
+      setConfigMode('RED')
+    } else if (configMode === 'RED' && redPoints.length >= 3) {
+      setConfigMode('DONE')
+    }
+  }
+
+  const handleSaveConfig = async () => {
+    try {
+      await fetch('http://localhost:8000/api/stream/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yellow_points: yellowPoints.map(p => [p.x, p.y]),
+          red_points: redPoints.map(p => [p.x, p.y])
+        })
+      })
+      setIsConfiguring(false)
+      setConfigMode('YELLOW')
+      // Opcional: mostrar notificación de éxito
+    } catch (err) {
+      console.error('Error guardando configuración', err)
+    }
+  }
+
+  const handleCancelConfig = () => {
+    setIsConfiguring(false)
+    setConfigMode('YELLOW')
+    setYellowPoints([])
+    setRedPoints([])
+  }
+
+  // Utilidad para dibujar polígonos SVG con porcentajes (0 a 1 -> 0 a 100%)
+  const createSvgPolygon = (points: Point[]) => {
+    if (points.length === 0) return ''
+    return points.map(p => `${p.x * 100},${p.y * 100}`).join(' ')
+  }
 
   return alertError || cameraError ? (
     <section className="surface-panel p-6">
@@ -42,20 +107,118 @@ export function LiveCameraPage(): ReactElement | null {
         <div className="space-y-5">
           <Panel
             title="VideoFeed"
-            description="Feed de video en vivo de la estación"
-            className="surface-panel p-5"
+            description={isConfiguring ? "Modo configuración: Haz clic en la imagen para dibujar" : "Feed de video en vivo de la estación"}
+            className="surface-panel p-5 relative"
           >
-            <div className="flex relative min-h-96 w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black text-center text-slate-300">
+            {/* Contenedor centralizado con aspect-video para alinear coordenadas visuales y de cámara */}
+            <div className="relative flex w-full aspect-video items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black text-center text-slate-300 group max-h-[720px] mx-auto">
               <img
                 src="http://localhost:8000/api/stream/video_feed"
                 alt="Stream en vivo"
-                className="w-full object-cover"
+                className={`w-full h-full object-fill select-none pointer-events-none ${isConfiguring ? 'opacity-60' : ''}`}
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
                   target.alt = "Feed no disponible. Revisa la conexión al backend.";
                   target.className = "text-red-400 p-8";
                 }}
               />
+              
+              {/* Capa de interacción y dibujo SVG (100% del contenedor) */}
+              <div
+                ref={overlayRef}
+                className="absolute inset-0 z-10 w-full h-full"
+                onClick={handleOverlayClick}
+                style={{ cursor: isConfiguring ? 'crosshair' : 'default' }}
+              >
+                {isConfiguring && (
+                  <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    {/* Relleno translúcido de ayuda y bordes */}
+                    {yellowPoints.length > 0 && (
+                      <polygon 
+                        points={createSvgPolygon(yellowPoints)} 
+                        fill="rgba(255, 204, 0, 0.2)" 
+                        stroke="#FFCC00" 
+                        strokeWidth="0.5" 
+                      />
+                    )}
+                    {redPoints.length > 0 && (
+                      <polygon 
+                        points={createSvgPolygon(redPoints)} 
+                        fill="rgba(255, 0, 0, 0.2)" 
+                        stroke="#FF0000" 
+                        strokeWidth="0.5" 
+                      />
+                    )}
+                    
+                    {/* Dibujar los puntos seleccionados para mejor UX */}
+                    {yellowPoints.map((p, i) => (
+                      <circle key={`yp-${i}`} cx={p.x * 100} cy={p.y * 100} r="0.8" fill="#FFCC00" />
+                    ))}
+                    {redPoints.map((p, i) => (
+                      <circle key={`rp-${i}`} cx={p.x * 100} cy={p.y * 100} r="0.8" fill="#FF0000" />
+                    ))}
+                  </svg>
+                )}
+              </div>
+
+              {/* Interfaz de configuración superpuesta */}
+              {isConfiguring ? (
+                <div className="absolute bottom-4 inset-x-4 flex items-center justify-between bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-xl p-4 shadow-xl z-20">
+                  <div>
+                    <h3 className="text-white font-semibold text-sm">
+                      {configMode === 'YELLOW' && "Dibujando Zona de Precaución (Amarilla)"}
+                      {configMode === 'RED' && "Dibujando Zona de Peligro (Roja)"}
+                      {configMode === 'DONE' && "¡Zonas configuradas! Listo para guardar."}
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-1">
+                      {configMode === 'YELLOW' && "Define al menos 3 puntos para enmarcar el polígono en la imagen."}
+                      {configMode === 'RED' && "Define al menos 3 puntos para abarcar el área roja."}
+                      {configMode === 'DONE' && "Revisa que los indicadores esten correctos."}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button 
+                      onClick={handleCancelConfig}
+                      className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition"
+                    >
+                      Cancelar
+                    </button>
+                    {configMode !== 'DONE' ? (
+                      <button 
+                        onClick={handleNextStep}
+                        disabled={
+                          (configMode === 'YELLOW' && yellowPoints.length < 3) || 
+                          (configMode === 'RED' && redPoints.length < 3)
+                        }
+                        className="px-4 py-1.5 text-sm font-medium bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:hover:bg-sky-600 text-white rounded-lg transition shadow-sm"
+                      >
+                        Siguiente
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={handleSaveConfig}
+                        className="px-4 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-sm font-semibold"
+                      >
+                        Guardar Zonas
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                  <button 
+                    onClick={() => {
+                      setIsConfiguring(true)
+                      setYellowPoints([])
+                      setRedPoints([])
+                      setConfigMode('YELLOW')
+                    }}
+                    className="bg-slate-900/80 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium border border-white/10 backdrop-blur-md shadow-lg"
+                  >
+                    Configurar Zonas
+                  </button>
+                </div>
+              )}
             </div>
           </Panel>
 
