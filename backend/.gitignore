@@ -1,4 +1,6 @@
 .env
 yolov8n.pt
 .venv/
-__pycache__/
+__pycache__/*.pt
+*.onnx
+*.engine

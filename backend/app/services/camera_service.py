@@ -12,7 +12,11 @@ class CameraService:
         self.serial = serial
         self.base_url = base_url
         self.config_file = "config.json"
-        self.conf_threshold = 0.5
+        
+        # Umbral configurable por entorno para equilibrar exigencia vs hardware (por defecto 0.25 para caza de lejos)
+        self.conf_threshold = float(os.getenv("YOLO_CONF_THRESHOLD", "0.25"))
+        # Resolución nativa de entrada para YOLO configurable (.env). 640 es rápido pero ciego de lejos. 1280 es exigente pero nítido
+        self.imgsz = int(os.getenv("YOLO_IMGSZ", "1280"))
         
         # Estado de zonas (Ahora se guardan como porcentajes de dimensiones 0.0 a 1.0)
         self.yellow_points = []
@@ -68,11 +72,33 @@ class CameraService:
     def generate_frames(self):
         """Generador de frames procesados para el streaming MJPEG."""
         use_mock = os.getenv("USE_MOCK_CAMERA", "False") == "True"
+        debug_stream_url = os.getenv("DEBUG_STREAM_URL", "")
         
         try:
-            source = 0 if use_mock else self.get_stream_url()
+            if debug_stream_url:
+                source = debug_stream_url
+                print(f"[INFO] Usando stream de debug: {source}")
+                # Extraer URL directa si es un enlace de YouTube
+                if "youtube.com" in source or "youtu.be" in source:
+                    try:
+                        import yt_dlp
+                        print("[INFO] Extrayendo URL cruda de YouTube con yt-dlp...")
+                        ydl_opts = {'format': 'best[ext=mp4]', 'quiet': True}
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info = ydl.extract_info(source, download=False)
+                            source = info['url']
+                    except ImportError:
+                        print("[ERROR] Falta instalar yt-dlp. Ejecuta: pip install yt-dlp")
+            elif use_mock:
+                source = 0
+                print("[INFO] Usando cámara web local (mock)")
+            else:
+                source = self.get_stream_url()
+                print("[INFO] Usando stream de Ezviz")
+                
             cap = cv2.VideoCapture(source)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            if not debug_stream_url:
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         except Exception as e:
             print(f"[ERROR] Fallo al iniciar captura: {e}")
             return
@@ -100,8 +126,8 @@ class CameraService:
                 cv2.polylines(frame, [pts_y], True, (0, 215, 255), 2)
                 cv2.polylines(frame, [pts_r], True, (0, 0, 255), 2)
 
-            # 2. Detección, Pose y Tracking con el modelo inyectado
-            results = self.model.track(frame, classes=[0], conf=self.conf_threshold, persist=True, verbose=False)
+            # 2. Detección, Pose y Tracking (Detectará la VRAM automáticamente si es ONNX)
+            results = self.model.track(frame, classes=[0], conf=self.conf_threshold, persist=True, verbose=False, imgsz=self.imgsz, half=True, device='0')
             
             total_personas = 0
             personas_riesgo = 0

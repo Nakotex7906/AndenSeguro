@@ -13,12 +13,26 @@ class ZoneConfig(BaseModel):
     yellow_points: List[Tuple[float, float]]
     red_points: List[Tuple[float, float]]
 
+import torch
+
 @lru_cache()
 def get_yolo_model():
     """Patrón Singleton: Carga el modelo una sola vez en memoria."""
-    print("[INFO] Cargando modelo YOLOv8-pose...")
-    # Usamos la variante 'pose' que entrega Keypoints + Bounding Boxes + hace Tracking
-    return YOLO("yolov8n-pose.pt")
+    # Permite definir el modelo en el .env, por defecto utilizará el más ligero (n)
+    model_name = os.getenv("YOLO_MODEL", "yolov8n-pose.pt")
+    print(f"[INFO] Cargando modelo {model_name}...")
+    
+    model = YOLO(model_name)
+    
+    # Validación y forzado de Hardware (Omitimos .to() si es un formato exportado como ONNX o Engine)
+    if torch.cuda.is_available():
+        print(f"[INFO] NVIDIA CUDA DETECTADO: Usando GPU ({torch.cuda.get_device_name(0)})")
+        if model_name.endswith('.pt'):
+            model.to('cuda')
+    else:
+        print("[ADVERTENCIA] CUDA NO DETECTADO: Usando CPU. El video se lagueará con modelos grandes.")
+        
+    return model
 
 @lru_cache()
 def get_camera_service() -> CameraService:
