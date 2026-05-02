@@ -2,5 +2,7 @@
 yolov8n.pt
 .venv/
 __pycache__/*.pt
+*.pt
 *.onnx
 *.engine
+__pycache__/
