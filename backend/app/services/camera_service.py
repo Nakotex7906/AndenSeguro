@@ -18,6 +18,16 @@ class CameraService:
         self.yellow_points = []
         self.red_points = []
         self.load_config()
+        
+        # Estadísticas en tiempo real
+        self.current_stats = {
+            "total_persons": 0,
+            "risk_persons": 0,
+            "danger_persons": 0
+        }
+        
+        import time
+        self.track_history = {} # Guardaremos {id: entry_time} para riesgo por tiempo
 
     def load_config(self):
         """Carga los polígonos guardados en el archivo de configuración."""
@@ -90,26 +100,97 @@ class CameraService:
                 cv2.polylines(frame, [pts_y], True, (0, 215, 255), 2)
                 cv2.polylines(frame, [pts_r], True, (0, 0, 255), 2)
 
-            # 2. Detección con el modelo inyectado
-            results = self.model(frame, classes=[0], conf=self.conf_threshold, verbose=False)
+            # 2. Detección, Pose y Tracking con el modelo inyectado
+            results = self.model.track(frame, classes=[0], conf=self.conf_threshold, persist=True, verbose=False)
+            
+            total_personas = 0
+            personas_riesgo = 0
+            personas_peligro = 0
+            import time
+            current_time = time.time()
+            debug_pose = os.getenv("DEBUG_POSE", "False") == "True"
             
             for result in results:
-                for box in result.boxes:
+                # Extraemos cajas y keypoints si es YOLOv8-pose
+                boxes = result.boxes
+                keypoints = result.keypoints if hasattr(result, 'keypoints') else None
+                
+                for i, box in enumerate(boxes):
+                    total_personas += 1
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     feet = ( (x1 + x2) // 2, y2 )
+                    box_id = int(box.id[0]) if box.id is not None else "N/A"
                     
-                    # Evaluación de posición
+                    # Evaluación de posición en base a polígonos
                     in_red = cv2.pointPolygonTest(np.array(abs_red, np.int32), feet, False) >= 0 if abs_red else False
                     in_yellow = cv2.pointPolygonTest(np.array(abs_yellow, np.int32), feet, False) >= 0 if abs_yellow else False
                     
                     color, label = (0, 255, 0), "SEGURO"
+                    is_risk = False
+                    is_danger = False
+
+                    # 3. Factor Postural y Lógica (Bounding Box + Pose Keypoints)
+                    bad_posture = False
+                    if keypoints and keypoints.xy is not None and len(keypoints.xy) > i:
+                        kpts = keypoints.xy[i]
+                        if len(kpts) > 12:  # Asegurar que hay suficientes keypoints (0=nariz, 11/12=caderas)
+                            # Evaluamos inclinación o cabeza gacha comparando Y de la nariz con cadera
+                            head_y = kpts[0][1]
+                            hip_y = (kpts[11][1] + kpts[12][1]) / 2 if kpts[11][1] > 0 else y2
+                            # Si la cabeza está más abajo o igual que la cadera
+                            if head_y > 0 and hip_y > 0 and head_y >= (hip_y - 20):
+                                bad_posture = True
+                                
+                            # DEBUG: Visualización estructurada del esqueleto sobre la persona
+                            if debug_pose:
+                                for kp in kpts:
+                                    px, py = int(kp[0]), int(kp[1])
+                                    if px > 0 and py > 0:
+                                        cv2.circle(frame, (px, py), 3, (255, 0, 255), -1) # Puntos fucsia
+
+                                # Eje de tracking postural: Línea visible desde la cabeza hasta la cadera
+                                head_x, head_y_int = int(kpts[0][0]), int(kpts[0][1])
+                                hip_x = int((kpts[11][0] + kpts[12][0]) / 2)
+                                hip_y_int = int((kpts[11][1] + kpts[12][1]) / 2)
+                                
+                                if head_x > 0 and head_y_int > 0 and hip_y_int > 0:
+                                    color_eje = (0, 165, 255) if bad_posture else (0, 255, 255) # Naranja alerta, Amarillo normal
+                                    cv2.line(frame, (head_x, head_y_int), (hip_x, hip_y_int), color_eje, 2)
+                                    if bad_posture:
+                                        cv2.putText(frame, "POSTURA CRITICA", (head_x - 30, head_y_int - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 165, 255), 1)
+
+                    # 4. Factor Temporal y Merodeo
+                    if in_yellow or in_red:
+                        if box_id not in self.track_history:
+                            self.track_history[box_id] = current_time
+                        time_in_zone = current_time - self.track_history[box_id]
+                    else:
+                        # Reseteamos su historial si sale de la zona
+                        if box_id in self.track_history:
+                            del self.track_history[box_id]
+                        time_in_zone = 0
+
                     if in_red:
                         color, label = (0, 0, 255), "PELIGRO"
+                        is_danger = True
                     elif in_yellow:
-                        color, label = (0, 215, 255), "PRECAUCION"
+                        if time_in_zone > 5.0 or bad_posture: # Más de 5 segundos inmóvil en línea amarilla o mala postura
+                            color, label = (0, 0, 255), "ALTO RIESGO"
+                            is_danger = True
+                        else:
+                            color, label = (0, 215, 255), "PRECAUCION"
+                            is_risk = True
 
+                    if is_danger: personas_peligro += 1
+                    if is_risk: personas_riesgo += 1
+
+                    # Dibujamos bounding box, postura (opcional), e ID
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    cv2.putText(frame, f"ID:{box_id} {label}", (x1, max(y1 - 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+            self.current_stats["total_persons"] = total_personas
+            self.current_stats["risk_persons"] = personas_riesgo
+            self.current_stats["danger_persons"] = personas_peligro
 
             # 3. Codificación para streaming
             ret, buffer = cv2.imencode('.jpg', frame)

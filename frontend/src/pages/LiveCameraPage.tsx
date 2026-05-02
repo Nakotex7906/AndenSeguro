@@ -1,10 +1,11 @@
-import { useState, useRef, type ReactElement, type MouseEvent } from 'react'
+import { useState, useRef, useEffect, type ReactElement, type MouseEvent } from 'react'
 
 import { Panel } from '../components/dashboard/Panel'
 import { useIncidentAlerts } from '../hooks/useIncidentAlerts'
 import { useLiveCameraOverview } from '../hooks/useLiveCameraOverview'
 
 type Point = { x: number; y: number }
+type CameraStats = { total_persons: number; risk_persons: number; danger_persons: number }
 
 /**
  * Renderiza la vista de monitoreo de cámara con la alerta activa.
@@ -19,6 +20,30 @@ export function LiveCameraPage(): ReactElement | null {
   const [configMode, setConfigMode] = useState<'YELLOW' | 'RED' | 'DONE'>('YELLOW')
   const [yellowPoints, setYellowPoints] = useState<Point[]>([])
   const [redPoints, setRedPoints] = useState<Point[]>([])
+  
+  // Estado para estadísticas en tiempo real
+  const [stats, setStats] = useState<CameraStats>({
+    total_persons: 0,
+    risk_persons: 0,
+    danger_persons: 0
+  })
+
+  // Polling de estadísticas cada 1 segundo
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/stream/stats')
+        if (response.ok) {
+          const data = await response.json()
+          setStats(data)
+        }
+      } catch (error) {
+        // Silenciamos el error para no llenar la consola en caso de caída temporal del backend
+      }
+    }
+    const intervalId = setInterval(fetchStats, 1000)
+    return () => clearInterval(intervalId)
+  }, [])
   
   // Referencia a div para calcular posiciones relativas
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -95,11 +120,16 @@ export function LiveCameraPage(): ReactElement | null {
           </p>
         </div>
 
-        <div className="surface-panel-strong rounded-2xl border-sky-500/30 px-4 py-3 text-right">
-          <p className="text-[0.65rem] font-semibold tracking-[0.22em] text-slate-400 uppercase">
-            Estado de incidente
+        <div className={`surface-panel-strong rounded-2xl border ${stats.danger_persons > 0 ? 'border-red-500/80 bg-red-950/40 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : stats.risk_persons > 0 ? 'border-yellow-500/80 bg-yellow-950/40' : 'border-sky-500/30'} px-6 py-4 text-right transition-all duration-300`}>
+          <p className={`text-[0.65rem] font-semibold tracking-[0.22em] uppercase ${stats.danger_persons > 0 ? 'text-red-400' : stats.risk_persons > 0 ? 'text-yellow-400' : 'text-slate-400'}`}>
+            Estado de Operación
           </p>
-          <p className="mt-1 text-sm text-slate-200">Pendiente de backend</p>
+          <div className="flex items-center justify-end gap-3 mt-1.5">
+            {stats.danger_persons > 0 && <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>}
+            <p className={`text-lg font-bold tracking-wide ${stats.danger_persons > 0 ? 'text-red-500' : stats.risk_persons > 0 ? 'text-yellow-500' : 'text-emerald-400'}`}>
+              {stats.danger_persons > 0 ? 'ALERTA CRÍTICA' : stats.risk_persons > 0 ? 'SOBREVIGILANCIA' : 'NORMAL'}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -223,17 +253,17 @@ export function LiveCameraPage(): ReactElement | null {
           </Panel>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/6 bg-slate-950/65 p-4">
-              <p className="text-sm text-slate-400">Personas en la zona</p>
-              <p className="mt-2 text-2xl font-semibold text-white">Pendiente de backend</p>
+            <div className="rounded-2xl border border-white/6 bg-slate-950/65 p-4 flex flex-col justify-center">
+              <p className="text-sm text-slate-400">Personas totales en vista</p>
+              <p className="mt-2 text-3xl font-semibold text-white">{stats.total_persons}</p>
             </div>
-            <div className="rounded-2xl border border-white/6 bg-slate-950/65 p-4">
-              <p className="text-sm text-slate-400">Riesgo por hora</p>
-              <p className="mt-2 text-2xl font-semibold text-white">Pendiente de backend</p>
+            <div className={`rounded-2xl border ${stats.risk_persons > 0 ? 'border-yellow-500/50 bg-yellow-500/10' : 'border-white/6 bg-slate-950/65'} p-4 flex flex-col justify-center transition-colors`}>
+              <p className={`text-sm ${stats.risk_persons > 0 ? 'text-yellow-400' : 'text-slate-400'}`}>Precaución / Merodeando</p>
+              <p className={`mt-2 text-3xl font-semibold ${stats.risk_persons > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.risk_persons}</p>
             </div>
-            <div className="rounded-2xl border border-white/6 bg-slate-950/65 p-4">
-              <p className="text-sm text-slate-400">Personas en riesgo</p>
-              <p className="mt-2 text-2xl font-semibold text-white">Pendiente de backend</p>
+            <div className={`rounded-2xl border ${stats.danger_persons > 0 ? 'border-red-500/50 bg-red-500/20' : 'border-white/6 bg-slate-950/65'} p-4 flex flex-col justify-center transition-colors`}>
+              <p className={`text-sm ${stats.danger_persons > 0 ? 'text-red-400 font-semibold uppercase tracking-wider' : 'text-slate-400'}`}>Personas en Zona Roja</p>
+              <p className={`mt-2 text-3xl font-semibold ${stats.danger_persons > 0 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{stats.danger_persons}</p>
             </div>
           </div>
 

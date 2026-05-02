@@ -16,8 +16,9 @@ class ZoneConfig(BaseModel):
 @lru_cache()
 def get_yolo_model():
     """Patrón Singleton: Carga el modelo una sola vez en memoria."""
-    print("[INFO] Cargando modelo YOLOv8...")
-    return YOLO("yolov8n.pt")
+    print("[INFO] Cargando modelo YOLOv8-pose...")
+    # Usamos la variante 'pose' que entrega Keypoints + Bounding Boxes + hace Tracking
+    return YOLO("yolov8n-pose.pt")
 
 @lru_cache()
 def get_camera_service() -> CameraService:
@@ -46,6 +47,11 @@ def video_feed(service: CameraService = Depends(get_camera_service)):
 def get_zone_config(service: CameraService = Depends(get_camera_service)):
     """Devuelve la configuración actual de polígonos."""
     return {"yellow_points": service.yellow_points, "red_points": service.red_points}
+
+@router.get("/stats")
+def get_stats(service: CameraService = Depends(get_camera_service)):
+    """Devuelve las estadísticas y alertas actuales analizadas por la cámara."""
+    return service.current_stats
 
 @router.post("/config")
 def update_zone_config(config: ZoneConfig, service: CameraService = Depends(get_camera_service)):
