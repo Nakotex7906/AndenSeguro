@@ -26,7 +26,7 @@ export function LiveCameraPage(): ReactElement | null {
             Vista Cámara 1: Plataforma
           </h1>
           <p className="mt-2 text-lg text-slate-300">
-            Datos del feed pendientes de integración con backend.
+            Monitorizando cámara principal en tiempo real.
           </p>
         </div>
 
@@ -42,12 +42,20 @@ export function LiveCameraPage(): ReactElement | null {
         <div className="space-y-5">
           <Panel
             title="VideoFeed"
-            description="Integración pendiente con la fuente de video"
+            description="Feed de video en vivo de la estación"
             className="surface-panel p-5"
           >
-            {/* TODO: Aquí se debería llamar al backend para renderizar la cámara en vivo, detecciones y bounding boxes. */}
-            <div className="flex min-h-96 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-slate-950/60 px-6 text-center text-slate-300">
-              Feed de cámara pendiente de integración.
+            <div className="flex relative min-h-96 w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black text-center text-slate-300">
+              <img
+                src="http://localhost:8000/api/stream/video_feed"
+                alt="Stream en vivo"
+                className="w-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.alt = "Feed no disponible. Revisa la conexión al backend.";
+                  target.className = "text-red-400 p-8";
+                }}
+              />
             </div>
           </Panel>
 
