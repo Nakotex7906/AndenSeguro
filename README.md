@@ -1,8 +1,5 @@
 # Andén Seguro — Sistema de Monitoreo Inteligente para Estaciones de Metro
 
-> **Actividad 4 — Contrato API | Entregable 1: README**
-
----
 
 ## 1. Descripción del Proyecto
 
