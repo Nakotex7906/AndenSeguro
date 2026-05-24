@@ -83,7 +83,7 @@ export function LiveCameraPage(): ReactElement | null {
       })
       setIsConfiguring(false)
       setConfigMode('YELLOW')
-      // Opcional: mostrar notificación de éxito
+      // notificación de éxito
     } catch (err) {
       console.error('Error guardando configuración', err)
     }
