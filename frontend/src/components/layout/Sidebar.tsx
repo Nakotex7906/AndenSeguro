@@ -89,13 +89,6 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps): ReactElemen
 
       <div className="mt-6 space-y-3">
         <button
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/20 bg-red-600/90 px-4 py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(220,38,38,0.18)] transition hover:bg-red-500"
-          type="button"
-        >
-          <SirenIcon size={16} weight="fill" />
-          Emergencia
-        </button>
-        <button
           className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-slate-400 transition hover:bg-white/5 hover:text-slate-100"
           type="button"
         >
