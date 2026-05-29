@@ -2,7 +2,7 @@
 
 > **Actividad 4 — Contrato API | Entregable 2: api_contract.md**
 >
-> **Versión:** `1.0.0` | **Fecha:** `2025-07-14` | **Estado:** `Vigente`
+> **Versión:** `1.0.0` | **Fecha:** `2026-05-29` | **Estado:** `Vigente`
 
 ---
 
