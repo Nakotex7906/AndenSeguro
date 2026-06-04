@@ -10,7 +10,8 @@ export interface MetricCardProps {
   flashOnMajorChangeOnly?: boolean
 }
 
-const dotColor: Record<DashboardMetric['tone'], string> = {
+// Se cambió a Record<string, string> para evitar errores si agregan más tonos en el tipo global
+const dotColor: Record<string, string> = {
   slate:   '#6b7280',
   blue:    '#38bdf8',
   amber:   '#f59e0b',
@@ -18,7 +19,8 @@ const dotColor: Record<DashboardMetric['tone'], string> = {
   emerald: '#22c55e',
 }
 
-const badgeStyle: Record<DashboardMetric['tone'], React.CSSProperties> = {
+// Se cambió a Record<string, React.CSSProperties>
+const badgeStyle: Record<string, React.CSSProperties> = {
   slate:   { backgroundColor: '#1c1e21', color: '#9ca3af', border: '1px solid #2e3135' },
   blue:    { backgroundColor: '#0e1929', color: '#38bdf8', border: '1px solid #1a3451' },
   amber:   { backgroundColor: '#1f1508', color: '#f59e0b', border: '1px solid #3d2c0a' },
@@ -26,7 +28,8 @@ const badgeStyle: Record<DashboardMetric['tone'], React.CSSProperties> = {
   emerald: { backgroundColor: '#091a11', color: '#22c55e', border: '1px solid #12382a' },
 }
 
-const flashColor: Record<DashboardMetric['tone'], string> = {
+// Se cambió a Record<string, string>
+const flashColor: Record<string, string> = {
   slate:   'rgba(107,114,128,0.12)',
   blue:    'rgba(56,189,248,0.10)',
   amber:   'rgba(245,158,11,0.12)',
@@ -80,11 +83,16 @@ export function MetricCard({ metric }: MetricCardProps): ReactElement {
     }
   }, [metric.value, isTimer])
 
+  // Respaldos (fallbacks) rápidos por si llega un color imprevisto de otra rama
+  const activeDotColor = dotColor[metric.tone] ?? '#6b7280'
+  const activeFlashColor = flashing ? (flashColor[metric.tone] ?? 'rgba(107,114,128,0.12)') : '#161719'
+  const activeBadgeStyle = badgeStyle[metric.tone] ?? { backgroundColor: '#1c1e21', color: '#9ca3af', border: '1px solid #2e3135' }
+
   return (
     <article
       style={{
-        backgroundColor: flashing ? flashColor[metric.tone] : '#161719',
-        border: `1px solid ${flashing ? dotColor[metric.tone] + '40' : '#242628'}`,
+        backgroundColor: activeFlashColor,
+        border: `1px solid ${flashing ? activeDotColor + '40' : '#242628'}`,
         borderRadius: 10,
         padding: '18px 20px',
         display: 'flex',
@@ -99,9 +107,9 @@ export function MetricCard({ metric }: MetricCardProps): ReactElement {
         <span
           style={{
             width: 8, height: 8, borderRadius: '50%',
-            backgroundColor: dotColor[metric.tone],
+            backgroundColor: activeDotColor,
             display: 'inline-block',
-            boxShadow: flashing ? `0 0 6px ${dotColor[metric.tone]}` : 'none',
+            boxShadow: flashing ? `0 0 6px ${activeDotColor}` : 'none',
             transition: 'box-shadow 0.5s ease',
           }}
           aria-hidden="true"
@@ -117,7 +125,7 @@ export function MetricCard({ metric }: MetricCardProps): ReactElement {
       <p style={{
         fontSize: valueFSize,
         fontWeight: 600,
-        color: flashing ? dotColor[metric.tone] : '#f0f0f0',
+        color: flashing ? activeDotColor : '#f0f0f0',
         lineHeight: 1,
         letterSpacing: isTimer ? '0.04em' : '-0.02em',
         marginTop: -4,
@@ -133,7 +141,7 @@ export function MetricCard({ metric }: MetricCardProps): ReactElement {
       {/* Badge */}
       <span
         style={{
-          ...badgeStyle[metric.tone],
+          ...activeBadgeStyle,
           display: 'inline-flex',
           alignSelf: 'flex-start',
           fontSize: '0.58rem',
@@ -151,8 +159,9 @@ export function MetricCard({ metric }: MetricCardProps): ReactElement {
 }
 
 function MetricIcon({ tone }: { tone: DashboardMetric['tone'] }): ReactElement {
-  const c = dotColor[tone]
-  const icons: Record<DashboardMetric['tone'], ReactElement> = {
+  const c = dotColor[tone] ?? '#6b7280'
+  // Se cambió a Record<string, ReactElement> para total tolerancia de llaves
+  const icons: Record<string, ReactElement> = {
     blue: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3" y="3" width="7" height="7" rx="1.5" stroke={c} strokeWidth="1.6"/>
@@ -189,5 +198,5 @@ function MetricIcon({ tone }: { tone: DashboardMetric['tone'] }): ReactElement {
       </svg>
     ),
   }
-  return icons[tone]
+  return icons[tone] ?? icons.slate
 }
