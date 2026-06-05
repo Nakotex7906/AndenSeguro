@@ -2,67 +2,43 @@ import { EnvelopeIcon, LockIcon, UserIcon, WarningCircleIcon } from '@phosphor-i
 import { useState } from 'react'
 import type { ReactElement, FormEvent } from 'react'
 
-type AuthMode = 'login' | 'register'
-
 export interface LoginPageProps {
   onLogin: () => void
 }
 
 /**
  * Vista de autenticación de Andén Seguro.
- * Alterna entre login y registro sin cambiar el layout.
- *
- * TODO (backend): handleSubmit → POST /api/auth/login { email, password }
- * TODO (backend): handleRegister → POST /api/auth/register { name, email, password }
- * Ambos deben retornar { token, user } y guardarlo en AuthContext.
+ * Solo inicio de sesión. El registro está reservado para el superadmin en otra vista.
  */
 export function LoginPage({ onLogin }: LoginPageProps): ReactElement {
-  const [mode,     setMode]     = useState<AuthMode>('login')
-  const [name,     setName]     = useState('')
-  const [email,    setEmail]    = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [confirm,  setConfirm]  = useState('')
   const [error,    setError]    = useState<string | null>(null)
   const [loading,  setLoading]  = useState(false)
-
-  function switchMode(next: AuthMode): void {
-    setMode(next)
-    setError(null)
-    setName('')
-    setEmail('')
-    setPassword('')
-    setConfirm('')
-  }
 
   async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault()
     setError(null)
 
-    if (!email.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim()) {
       setError('Completa todos los campos.')
       return
     }
 
-    if (mode === 'register') {
-      if (!name.trim()) { setError('Ingresa tu nombre completo.'); return }
-      if (password !== confirm) { setError('Las contraseñas no coinciden.'); return }
-      if (password.length < 8)  { setError('La contraseña debe tener al menos 8 caracteres.'); return }
-    }
-
     setLoading(true)
     try {
-      /* TODO (backend):
-       * if (mode === 'login')    await fetch('/api/auth/login',    { method: 'POST', body: JSON.stringify({ email, password }) })
-       * if (mode === 'register') await fetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) })
-       * Guardar token en AuthContext y redirigir al dashboard.
-       */
-      await new Promise((r) => setTimeout(r, 800))
+      const res = await fetch('http://localhost:8000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+      if (!res.ok) throw new Error('Credenciales incorrectas')
+      const data = await res.json()
+      localStorage.setItem('token', data.access_token)
+      
       onLogin()
     } catch {
-      setError(mode === 'login'
-        ? 'Credenciales incorrectas. Intenta nuevamente.'
-        : 'No se pudo crear la cuenta. Intenta nuevamente.'
-      )
+      setError('Credenciales incorrectas. Intenta nuevamente.')
     } finally {
       setLoading(false)
     }
@@ -120,45 +96,25 @@ export function LoginPage({ onLogin }: LoginPageProps): ReactElement {
 
           {/* Título según modo */}
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#f0f0f0', letterSpacing: '-0.02em', marginBottom: 4 }}>
-            {mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+            Iniciar sesión
           </h1>
           <p style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: 24 }}>
-            {mode === 'login'
-              ? 'Accede al sistema de monitoreo de andenes.'
-              : 'Registra tus credenciales de operador.'}
+            Accede al sistema de monitoreo de andenes.
           </p>
 
           {/* Formulario */}
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-            {/* Nombre — solo en registro */}
-            {mode === 'register' && (
-              <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#4b4f56' }}>
-                  <UserIcon size={15} />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Nombre completo"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  style={inputStyle}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = '#3a3d41' }}
-                  onBlur={(e)  => { e.currentTarget.style.borderColor = '#242628' }}
-                />
-              </div>
-            )}
-
-            {/* Email */}
+            {/* Usuario */}
             <div style={{ position: 'relative' }}>
               <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#4b4f56' }}>
-                <EnvelopeIcon size={15} />
+                <UserIcon size={15} />
               </span>
               <input
-                type="email"
-                placeholder="Correo electrónico"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                placeholder="Nombre de usuario"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 style={inputStyle}
                 onFocus={(e) => { e.currentTarget.style.borderColor = '#3a3d41' }}
                 onBlur={(e)  => { e.currentTarget.style.borderColor = '#242628' }}
@@ -180,24 +136,6 @@ export function LoginPage({ onLogin }: LoginPageProps): ReactElement {
                 onBlur={(e)  => { e.currentTarget.style.borderColor = '#242628' }}
               />
             </div>
-
-            {/* Confirmar contraseña — solo en registro */}
-            {mode === 'register' && (
-              <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#4b4f56' }}>
-                  <LockIcon size={15} />
-                </span>
-                <input
-                  type="password"
-                  placeholder="Confirmar contraseña"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  style={inputStyle}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = '#3a3d41' }}
-                  onBlur={(e)  => { e.currentTarget.style.borderColor = '#242628' }}
-                />
-              </div>
-            )}
 
             {/* Error */}
             {error && (
@@ -226,23 +164,9 @@ export function LoginPage({ onLogin }: LoginPageProps): ReactElement {
                 transition: 'background-color 0.2s',
               }}
             >
-              {loading
-                ? 'Verificando…'
-                : mode === 'login' ? 'Ingresar al sistema' : 'Crear cuenta'}
+              {loading ? 'Verificando…' : 'Ingresar al sistema'}
             </button>
           </form>
-
-          {/* Switch de modo */}
-          <p style={{ fontSize: '0.75rem', color: '#4b4f56', textAlign: 'center', marginTop: 20 }}>
-            {mode === 'login' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}{' '}
-            <button
-              type="button"
-              onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
-              style={{ background: 'none', border: 'none', color: '#22c55e', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
-            >
-              {mode === 'login' ? 'Regístrate' : 'Inicia sesión'}
-            </button>
-          </p>
         </div>
 
         {/* ── Panel derecho: logo y marca ── */}

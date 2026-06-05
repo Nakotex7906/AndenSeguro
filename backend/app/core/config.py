@@ -31,10 +31,12 @@ class Settings(BaseSettings):
     SERIAL: str = ""
     BASE_URL: str = "https://isaopen.ezvizlife.com"
 
-    # --- Debug ---
+    # --- Debug / Multicámara ---
     USE_MOCK_CAMERA: bool = False
     DEBUG_POSE: bool = False
-    DEBUG_STREAM_URL: str = ""
+    CAMERA_1_URL: str = ""
+    CAMERA_2_URL: str = ""
+    CAMERA_3_URL: str = ""
 
     # --- Riesgo ---
     LOITERING_THRESHOLD_SECONDS: float = 5.0

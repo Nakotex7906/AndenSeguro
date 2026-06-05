@@ -26,25 +26,23 @@ class CameraService:
 
     def __init__(
         self,
+        camera_id: int,
+        stream_url: str,
         detector: PersonDetector,
         pose_analyzer: PoseAnalyzer,
         risk_evaluator: RiskEvaluator,
-        app_key: str,
-        app_secret: str,
-        serial: str,
-        base_url: str,
+        yellow_points: list = None,
+        red_points: list = None,
     ):
+        self.camera_id = camera_id
+        self.stream_url = stream_url
         self.detector = detector
         self.pose_analyzer = pose_analyzer
         self.risk_evaluator = risk_evaluator
-        self.app_key = app_key
-        self.app_secret = app_secret
-        self.serial = serial
-        self.base_url = base_url
 
-        # Estado de zonas (porcentajes 0.0 a 1.0, cargados desde DB o defaults)
-        self.yellow_points: list = []
-        self.red_points: list = []
+        # Estado de zonas cargadas desde DB
+        self.yellow_points = yellow_points or []
+        self.red_points = red_points or []
 
         # Estadísticas en tiempo real
         self.current_stats = {
@@ -57,69 +55,26 @@ class CameraService:
         self._alert_cooldown: dict[int, float] = {}
         self._alert_cooldown_seconds = 10.0
 
-    def get_stream_url(self) -> str:
-        """Obtiene la URL de transmisión usando la API de Ezviz."""
-        import requests
-
-        if not all([self.app_key, self.app_secret, self.serial]):
-            raise Exception("Faltan credenciales en el archivo .env")
-
-        resp_token = requests.post(
-            f"{self.base_url}/api/lapp/token/get",
-            data={"appKey": self.app_key, "appSecret": self.app_secret},
-        )
-        token_data = resp_token.json()
-
-        if token_data.get("code") != "200":
-            raise Exception(
-                f"Error de autenticación API: {token_data.get('msg')}"
-            )
-
-        token = token_data["data"]["accessToken"]
-
-        resp_url = requests.post(
-            f"{self.base_url}/api/lapp/v2/live/address/get",
-            data={
-                "accessToken": token,
-                "deviceSerial": self.serial,
-                "channelNo": 1,
-                "protocol": 3,
-                "quality": 1,
-            },
-        )
-        url_data = resp_url.json()
-        return url_data["data"]["url"]
-
     def _resolve_video_source(self):
-        """Determina la fuente de video (debug, mock o Ezviz)."""
-        debug_stream_url = settings.DEBUG_STREAM_URL
+        """Determina la fuente de video."""
+        source = self.stream_url
 
-        if debug_stream_url:
-            source = debug_stream_url
-            logger.info(f"Usando stream de debug: {source}")
+        if source:
+            logger.info(f"Cámara #{self.camera_id} - Usando stream: {source}")
             if "youtube.com" in source or "youtu.be" in source:
                 try:
                     import yt_dlp
-
-                    logger.info(
-                        "Extrayendo URL cruda de YouTube con yt-dlp..."
-                    )
+                    logger.info("Extrayendo URL cruda de YouTube con yt-dlp...")
                     ydl_opts = {"format": "best[ext=mp4]", "quiet": True}
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = ydl.extract_info(source, download=False)
                         source = info["url"]
                 except ImportError:
-                    logger.error(
-                        "Falta instalar yt-dlp. Ejecuta: pip install yt-dlp"
-                    )
+                    logger.error("Falta instalar yt-dlp. Ejecuta: pip install yt-dlp")
             return source
 
-        if settings.USE_MOCK_CAMERA:
-            logger.info("Usando cámara web local (mock)")
-            return 0
-
-        logger.info("Usando stream de Ezviz")
-        return self.get_stream_url()
+        logger.warning(f"Cámara #{self.camera_id} - No hay stream configurado. Usando cámara local 0")
+        return 0
 
     def _should_emit_alert(self, track_id: int | None) -> bool:
         """Verifica si se debe emitir una alerta (cooldown anti-spam)."""
@@ -137,7 +92,7 @@ class CameraService:
         try:
             source = self._resolve_video_source()
             cap = cv2.VideoCapture(source)
-            if not settings.DEBUG_STREAM_URL:
+            if source != 0 and "youtube" not in str(self.stream_url):
                 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         except Exception as e:
             logger.error(f"Fallo al iniciar captura: {e}")
@@ -149,7 +104,12 @@ class CameraService:
             try:
                 success, frame = cap.read()
                 if not success:
-                    logger.warning("Error al leer frame. Reintentando...")
+                    # Si el stream es un archivo local y termina, reiniciarlo para hacer un loop infinito
+                    if source and isinstance(source, str) and source.endswith(".mp4"):
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        continue
+                    logger.warning("Error al leer frame. Reintentando en 1s...")
+                    time.sleep(1)
                     continue
             except Exception as e:
                 logger.error(f"Error leyendo frame del video: {e}")
@@ -169,16 +129,21 @@ class CameraService:
                 else []
             )
 
-            # Dibujar zonas de riesgo
-            if abs_yellow and abs_red:
-                overlay = frame.copy()
+            # Dibujar zonas de riesgo de forma independiente
+            overlay = frame.copy()
+            if abs_yellow:
                 pts_y = np.array(abs_yellow, np.int32)
-                pts_r = np.array(abs_red, np.int32)
                 cv2.fillPoly(overlay, [pts_y], (0, 215, 255))
+            if abs_red:
+                pts_r = np.array(abs_red, np.int32)
                 cv2.fillPoly(overlay, [pts_r], (0, 0, 255))
-                cv2.addWeighted(overlay, 0.2, frame, 0.8, 0, frame)
-                cv2.polylines(frame, [pts_y], True, (0, 215, 255), 2)
-                cv2.polylines(frame, [pts_r], True, (0, 0, 255), 2)
+                
+            cv2.addWeighted(overlay, 0.2, frame, 0.8, 0, frame)
+            
+            if abs_yellow:
+                cv2.polylines(frame, [np.array(abs_yellow, np.int32)], True, (0, 215, 255), 2)
+            if abs_red:
+                cv2.polylines(frame, [np.array(abs_red, np.int32)], True, (0, 0, 255), 2)
 
             # Pipeline de IA: Detección → Pose → Riesgo
             yellow_polygon = (
@@ -245,6 +210,7 @@ class CameraService:
                         ws_manager.broadcast_sync(
                             {
                                 "type": "alert",
+                                "camera_id": self.camera_id,
                                 "level": alert_level,
                                 "track_id": det.track_id,
                                 "zone": assessment.zone.value,

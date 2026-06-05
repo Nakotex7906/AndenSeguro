@@ -141,10 +141,13 @@ def _seed_demo_stations():
 
 
 # --- Registro de Rutas ---
-from app.api.routes import auth, dashboard, incidents, stream  # noqa: E402
+from app.api.routes import auth, dashboard, incidents, stream, alerts  # noqa: E402
 
 app.include_router(
     stream.router, prefix="/api/stream", tags=["Streaming"]
+)
+app.include_router(
+    alerts.router, prefix="/api/alerts", tags=["Alertas"]
 )
 app.include_router(
     auth.router, prefix="/api/auth", tags=["Autenticación"]

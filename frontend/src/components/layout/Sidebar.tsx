@@ -5,6 +5,7 @@ import {
   SirenIcon,
   SquaresFourIcon,
   VideoCameraIcon,
+  UsersIcon,
 } from '@phosphor-icons/react'
 import type { ReactElement } from 'react'
 
@@ -19,6 +20,8 @@ interface SidebarItem {
 export interface SidebarProps {
   activeView: ViewId
   onViewChange: (viewId: ViewId) => void
+  onLogout?: () => void
+  userRole?: string | null
 }
 
 const mainItems: SidebarItem[] = [
@@ -29,7 +32,13 @@ const mainItems: SidebarItem[] = [
   { id: 'history',    label: 'Datos Históricos',     icon: <ClockCounterClockwiseIcon size={16} /> },
 ]
 
-export function Sidebar({ activeView, onViewChange }: SidebarProps): ReactElement {
+export function Sidebar({ activeView, onViewChange, onLogout, userRole }: SidebarProps): ReactElement {
+  const adminItems: SidebarItem[] = [
+    { id: 'users', label: 'Gestión de Operadores', icon: <UsersIcon size={16} /> }
+  ]
+  
+  const allItems = userRole === 'admin' ? [...mainItems, ...adminItems] : mainItems
+
   return (
     <aside
       style={{ backgroundColor: '#111214', borderRight: '1px solid #1f2023' }}
@@ -61,7 +70,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps): ReactElemen
         </p>
 
         <div className="flex flex-col gap-0.5">
-          {mainItems.map((item) => {
+          {allItems.map((item) => {
             const isActive = item.id === activeView
             return (
               <button
@@ -102,6 +111,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps): ReactElemen
           </button>
           <button
             type="button"
+            onClick={onLogout}
             style={{ color: '#4b4f56' }}
             className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[0.8rem] transition-colors hover:bg-[#1a1c1f] hover:text-[#9ca3af]"
           >

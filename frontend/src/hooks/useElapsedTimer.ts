@@ -23,6 +23,10 @@ export function useElapsedTimer(initialSeconds: number): { elapsedTime: string }
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(initialSeconds)
 
   useEffect(() => {
+    setElapsedSeconds(initialSeconds)
+  }, [initialSeconds])
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       setElapsedSeconds((currentSeconds) => currentSeconds + 1)
     }, 1000)

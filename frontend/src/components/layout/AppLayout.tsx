@@ -9,6 +9,8 @@ export interface AppLayoutProps {
   isNavigationPending: boolean
   children: ReactNode
   onViewChange: (viewId: ViewId) => void
+  onLogout?: () => void
+  userRole?: string | null
 }
 
 export function AppLayout({
@@ -16,11 +18,13 @@ export function AppLayout({
   children,
   isNavigationPending,
   onViewChange,
+  onLogout,
+  userRole,
 }: AppLayoutProps): ReactElement {
   return (
     <div style={{ backgroundColor: '#0d0e10', minHeight: '100vh' }} className="text-slate-100">
       {/* Sidebar fijo */}
-      <Sidebar activeView={activeView} onViewChange={onViewChange} />
+      <Sidebar activeView={activeView} onViewChange={onViewChange} onLogout={onLogout} userRole={userRole} />
 
       {/* Contenido desplazado exactamente el ancho del sidebar (16rem = 256px) */}
       <div className="ml-64 flex min-h-screen flex-col">
