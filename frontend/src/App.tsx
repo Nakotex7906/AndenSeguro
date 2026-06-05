@@ -5,30 +5,22 @@ import { AppLayout } from './components/layout/AppLayout'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LiveCameraPage } from './pages/LiveCameraPage'
+import { ProtocolsPage } from './pages/ProtocolsPage'
 import type { ViewId } from './types/dashboard'
 
-/**
- * Renderiza la aplicación raíz y coordina el cambio entre vistas.
- * @returns La aplicación principal del frontend.
- */
 function App(): ReactElement {
   const [activeView, setActiveView] = useState<ViewId>('dashboard')
   const [isNavigationPending, startTransition] = useTransition()
 
   function handleViewChange(viewId: ViewId): void {
-    startTransition(() => {
-      setActiveView(viewId)
-    })
+    startTransition(() => setActiveView(viewId))
   }
 
   const pageContent =
-    activeView === 'dashboard' ? (
-      <DashboardPage />
-    ) : activeView === 'camera' ? (
-      <LiveCameraPage />
-    ) : (
-      <ComingSoonPage viewId={activeView} />
-    )
+    activeView === 'dashboard' ? <DashboardPage /> :
+    activeView === 'camera'    ? <LiveCameraPage /> :
+    activeView === 'protocols' ? <ProtocolsPage /> :
+    <ComingSoonPage viewId={activeView} />
 
   return (
     <AppLayout

@@ -1,46 +1,48 @@
 import type { ReactElement } from 'react'
-
 import type { LineStatus } from '../../types/dashboard'
 
-/**
- * Propiedades para el listado de estados de las líneas.
- */
 export interface StatusListProps {
   items: LineStatus[]
 }
 
-const toneIndicatorClasses: Record<LineStatus['tone'], string> = {
-  slate: 'border-slate-500/30 bg-slate-500/10 text-slate-100',
-  blue: 'border-sky-500/30 bg-sky-500/10 text-sky-100',
-  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-100',
-  red: 'border-red-500/30 bg-red-500/10 text-red-100',
-  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
+const badgeColors: Record<LineStatus['tone'], { bg: string; color: string; border: string }> = {
+  slate:   { bg: '#1c1e21', color: '#9ca3af', border: '#2e3135' },
+  blue:    { bg: '#0e1929', color: '#38bdf8', border: '#1a3451' },
+  amber:   { bg: '#1a1305', color: '#f59e0b', border: '#3d2e09' },
+  red:     { bg: '#1a0a0a', color: '#ef4444', border: '#3d1212' },
+  emerald: { bg: '#091a11', color: '#22c55e', border: '#12382a' },
+  purple:  { bg: '#140d1f', color: '#a78bfa', border: '#2e1a4a' },
+  gray:    { bg: '#131415', color: '#6b7280', border: '#27292c' },
+  orange:  { bg: '#1a0f03', color: '#fb923c', border: '#3d2409' },
+  pink:    { bg: '#1a0a12', color: '#f472b6', border: '#3d1228' },
 }
 
-/**
- * Presenta el estado resumido de cada línea en una lista apilada.
- * @param props - Estados a mostrar dentro del panel.
- * @returns Un listado de indicadores operativos.
- */
 export function StatusList({ items }: StatusListProps): ReactElement {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2.5">
       {items.map((item) => {
-        const toneClassName = toneIndicatorClasses[item.tone]
-
+        const c = badgeColors[item.tone]
         return (
           <article
             key={item.id}
-            className="flex items-center gap-4 rounded-xl border border-white/6 bg-slate-950/55 px-4 py-4"
+            style={{ backgroundColor: '#0d0e10', border: '1px solid #1f2023', borderRadius: 8, padding: '12px 14px' }}
+            className="flex items-center gap-3"
           >
+            {/* Badge código de línea */}
             <div
-              className={`flex h-11 w-11 items-center justify-center rounded-md border text-sm font-semibold ${toneClassName}`}
+              style={{
+                width: 40, height: 40, borderRadius: 7, flexShrink: 0,
+                backgroundColor: c.bg, border: `1px solid ${c.border}`,
+                color: c.color, fontSize: '0.7rem', fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                letterSpacing: '0.06em',
+              }}
             >
               {item.code}
             </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-white">{item.name}</h3>
-              <p className="mt-0.5 text-sm text-slate-400">{item.detail}</p>
+            <div>
+              <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e2e2e2' }}>{item.name}</p>
+              <p style={{ fontSize: '0.73rem', color: '#6b7280', marginTop: 2 }}>{item.detail}</p>
             </div>
           </article>
         )

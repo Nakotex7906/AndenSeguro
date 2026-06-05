@@ -1,27 +1,15 @@
-/**
- * Identifica la vista principal activa dentro del dashboard.
- */
 export type ViewId = 'dashboard' | 'camera' | 'alerts' | 'protocols' | 'history'
+export type Tone = 'slate' | 'blue' | 'amber' | 'red' | 'emerald' | 'purple' | 'gray' | 'orange' | 'pink'
 
-/**
- * Define los tonos visuales usados para resaltar métricas y estados.
- */
-export type Tone = 'slate' | 'blue' | 'amber' | 'red' | 'emerald'
-
-/**
- * Describe una métrica visible en las tarjetas del panel de control.
- */
 export interface DashboardMetric {
   id: string
   label: string
   value: string
+  unit?: string
   caption: string
   tone: Tone
 }
 
-/**
- * Describe el estado de una línea de monitoreo.
- */
 export interface LineStatus {
   id: string
   code: string
@@ -30,12 +18,10 @@ export interface LineStatus {
   tone: Tone
 }
 
-/**
- * Agrupa los datos visibles en la vista principal del dashboard.
- */
 export interface DashboardOverview {
   title: string
   subtitle: string
+  systemStatus: 'OPERATIVO' | 'PRECAUCIÓN' | 'FUERA DE SERVICIO'
   uptimeSeconds: number
   metrics: DashboardMetric[]
   mapTitle: string
@@ -43,9 +29,6 @@ export interface DashboardOverview {
   lineStatuses: LineStatus[]
 }
 
-/**
- * Describe una tarjeta de soporte o recurso disponible para una alerta.
- */
 export interface SupportResource {
   id: string
   name: string
@@ -53,9 +36,6 @@ export interface SupportResource {
   tone: Tone
 }
 
-/**
- * Representa una alerta crítica mostrada en la vista de cámaras.
- */
 export interface IncidentAlert {
   title: string
   cameraLabel: string
@@ -67,9 +47,6 @@ export interface IncidentAlert {
   supportResources: SupportResource[]
 }
 
-/**
- * Describe una métrica breve usada dentro de la vista de cámara.
- */
 export interface CameraInsight {
   id: string
   label: string
@@ -77,9 +54,6 @@ export interface CameraInsight {
   tone: Tone
 }
 
-/**
- * Agrupa los datos simulados de la vista de cámara en vivo.
- */
 export interface LiveCameraOverview {
   title: string
   subtitle: string
@@ -88,4 +62,53 @@ export interface LiveCameraOverview {
   elapsedSeconds: number
   insights: CameraInsight[]
   supportResources: SupportResource[]
+}
+/* ── PROTOCOLOS ─────────────────────────────────────────────────── */
+
+/** Nivel de riesgo según escala C-SSRS */
+export type RiskLevel = 'leve' | 'moderado' | 'alto'
+
+/** Una señal de alerta observable seleccionable por el operador */
+export interface AlertSignal {
+  id: string
+  label: string
+  selected: boolean
+}
+
+/** Un paso del protocolo operativo con estado de completitud */
+export interface ProtocolStep {
+  id: string
+  title: string
+  description: string
+  completed: boolean
+}
+
+/** Canal de respuesta rápida disponible */
+export interface ResponseChannel {
+  id: string
+  label: string
+  phone: string
+  icon: 'security' | 'firefighters' | 'paramedics' | 'megaphone' | 'health' | 'police'
+  tone: Tone
+}
+
+/** Nota registrada por el operador con timestamp */
+export interface OperatorNote {
+  id: string
+  timestamp: string
+  text: string
+}
+
+/** Estado completo del incidente activo en la vista de protocolos */
+export interface ActiveProtocol {
+  incidentLabel: string
+  location: string
+  station: string
+  elapsedSeconds: number
+  affectedPersons: number
+  riskLevel: RiskLevel | null
+  alertSignals: AlertSignal[]
+  steps: ProtocolStep[]
+  channels: ResponseChannel[]
+  notes: OperatorNote[]
 }
