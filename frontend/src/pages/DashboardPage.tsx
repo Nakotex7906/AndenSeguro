@@ -9,11 +9,8 @@ import { StatusList } from '../components/dashboard/StatusList'
 import { Button } from '../components/ui/Button'
 import { useDashboardOverview } from '../hooks/useDashboardOverview'
 import { useElapsedTimer } from '../hooks/useElapsedTimer'
-import type { DashboardOverview, ViewId } from '../types/dashboard'
+import type { DashboardOverview } from '../types/dashboard'
 
-export interface DashboardPageProps {
-  onViewChange: (viewId: ViewId) => void
-}
 
 /** Color y fondo del badge de systemStatus según el estado */
 const statusStyle: Record<DashboardOverview['systemStatus'], React.CSSProperties> = {
@@ -22,7 +19,7 @@ const statusStyle: Record<DashboardOverview['systemStatus'], React.CSSProperties
   'FUERA DE SERVICIO': { color: '#f87171', backgroundColor: '#1a0808', border: '1px solid #3d1212' },
 }
 
-export function DashboardPage({ onViewChange: _onViewChange }: DashboardPageProps): ReactElement | null {
+export function DashboardPage(): ReactElement | null {
   const { data, error } = useDashboardOverview()
   const { elapsedTime }  = useElapsedTimer(data?.uptimeSeconds ?? 0)
   const [mapExpanded,   setMapExpanded]   = useState(false)
