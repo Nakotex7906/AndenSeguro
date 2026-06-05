@@ -2,14 +2,12 @@ import type { ReactElement } from 'react'
 
 import type { CameraInsight } from '../../types/dashboard'
 
-/**
- * Propiedades de una tarjeta de información breve.
- */
 export interface InsightCardProps {
   insight: CameraInsight
 }
 
-const toneClasses: Record<CameraInsight['tone'], string> = {
+// Se cambió el tipo de la llave a 'string' para tolerar nuevos tonos agregados en el backend/global sin romper la compilación
+const toneClasses: Record<string, string> = {
   slate: 'border-slate-400/30 bg-slate-400/10 text-slate-100',
   blue: 'border-sky-400/30 bg-sky-400/10 text-sky-100',
   amber: 'border-amber-400/30 bg-amber-400/10 text-amber-100',
@@ -17,14 +15,14 @@ const toneClasses: Record<CameraInsight['tone'], string> = {
   emerald: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
 }
 
-/**
- * Renderiza una métrica compacta de la cámara con tonos críticos.
- * @param props - Información resumida del evento observado.
- * @returns Una tarjeta pequeña reutilizable.
- */
+
 export function InsightCard({ insight }: InsightCardProps): ReactElement {
+
+  // Respaldo (fallback) por si llega un tono nuevo imprevisto, usa el estilo 'slate' por defecto
+  const activeClass = toneClasses[insight.tone] ?? toneClasses.slate
+
   return (
-    <article className={`rounded-2xl border p-4 ${toneClasses[insight.tone]} bg-slate-900/80`}>
+    <article className={`rounded-2xl border p-4 ${activeClass} bg-slate-900/80`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] text-slate-400 uppercase">
