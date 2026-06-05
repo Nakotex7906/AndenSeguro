@@ -111,6 +111,7 @@ export function useActiveProtocol(incidentId: number = 1): {
         setProtocol(prev => ({
           ...prev,
           incidentLabel: `INCIDENTE #${data.incident.id} ACTIVO`,
+          cameraId: data.incident.camera_id,
           elapsedSeconds: elapsed,
           riskLevel: finalRiskLevel,
           notes: hydratedNotes.length > 0 ? hydratedNotes : prev.notes,

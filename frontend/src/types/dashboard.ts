@@ -112,4 +112,5 @@ export interface ActiveProtocol {
   steps: ProtocolStep[]
   channels: ResponseChannel[]
   notes: OperatorNote[]
+  cameraId?: number
 }

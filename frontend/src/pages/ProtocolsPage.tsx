@@ -128,7 +128,8 @@ export function ProtocolsPage(): ReactElement {
             <div style={{ position: 'relative', backgroundColor: '#0a0b0d', borderRadius: 8, overflow: 'hidden', minHeight: 220 }}
                  className="flex items-center justify-center aspect-video w-full">
               <img
-                src="http://localhost:8000/api/stream/video_feed"
+                key={protocol.cameraId || 1}
+                src={`http://localhost:8000/api/stream/video_feed/${protocol.cameraId || 1}`}
                 alt="Feed en vivo"
                 className="w-full h-full object-fill select-none pointer-events-none"
                 onError={(e) => {

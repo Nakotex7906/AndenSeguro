@@ -17,14 +17,16 @@ const CAMERA_LABEL  = 'CAMARA EN VIVO  •  CAM-01-ANDEN'
 const REC_START     = 2532   // segundos grabados al montar
 
 const LINKED_CAMERAS = [
-  { id: 'cam-02', label: 'CAM-02-PASILLO',   thumb: null },
-  { id: 'cam-03', label: 'CAM-03-ENTRADA',   thumb: null },
-  { id: 'cam-04', label: 'CAM-04-ESCALERAS', thumb: null },
-  { id: 'cam-05', label: 'CAM-05-BOLETERIA', thumb: null },
+  { id: 1, label: 'CAM-01-ANDEN',     thumb: null },
+  { id: 2, label: 'CAM-02-PASILLO',   thumb: null },
+  { id: 3, label: 'CAM-03-ENTRADA',   thumb: null },
 ]
 
 export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId) => void }): ReactElement | null {
-  const { data: alertData, error: alertError } = useIncidentAlerts()
+  // Estado para la cámara seleccionada
+  const [activeCameraId, setActiveCameraId] = useState<number>(1)
+
+  const { data: alertData, error: alertError } = useIncidentAlerts(activeCameraId)
   const { error: cameraError } = useLiveCameraOverview()
   const { elapsedTime: recTime } = useElapsedTimer(REC_START)
 
@@ -46,18 +48,18 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/stream/stats')
+        const response = await fetch(`http://localhost:8000/api/stream/stats/${activeCameraId}`)
         if (response.ok) {
           const data = await response.json()
           setStats(data)
         }
       } catch (error) {
-        // Silenciamos el error para no llenar la consola en caso de caída temporal del backend
+        // Silenciamos el error
       }
     }
     const intervalId = setInterval(fetchStats, 1000)
     return () => clearInterval(intervalId)
-  }, [])
+  }, [activeCameraId])
   
   // Referencia a div para calcular posiciones relativas
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -85,7 +87,7 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
 
     // 1. Obtener configuración actual de la DB para respaldarla
     try {
-      const res = await fetch('http://localhost:8000/api/stream/config?camera_id=1')
+      const res = await fetch(`http://localhost:8000/api/stream/config/${activeCameraId}`)
       if (res.ok) {
         const data = await res.json()
         originalZonesRef.current = {
@@ -95,11 +97,8 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
       }
       
       // 2. Limpiar las zonas en la memoria del backend temporalmente para tener una vista limpia
-      await fetch('http://localhost:8000/api/stream/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yellow_points: [], red_points: [] })
-      })
+      // Como ahora los endpoints se guardan directamente a la DB, solo limpiaremos la vista (estado local)
+      // Y no enviamos POST de limpieza hasta que el usuario decida guardar.
     } catch (err) {
       console.error('Error al iniciar configuración', err)
     }
@@ -115,7 +114,7 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
 
   const handleSaveConfig = async () => {
     try {
-      await fetch('http://localhost:8000/api/stream/config?camera_id=1', {
+      await fetch(`http://localhost:8000/api/stream/config/${activeCameraId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -132,26 +131,9 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
   }
 
   const handleCancelConfig = async () => {
-    // Restaurar las zonas originales en memoria del backend
-    if (originalZonesRef.current) {
-      try {
-        await fetch('http://localhost:8000/api/stream/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            yellow_points: originalZonesRef.current.yellow_points.map(p => [p.x, p.y]),
-            red_points: originalZonesRef.current.red_points.map(p => [p.x, p.y])
-          })
-        })
-      } catch (err) {
-        console.error('Error restaurando configuración', err)
-      }
-    }
-
+    // Restaurar el estado local de configuración a null
     setIsConfiguring(false)
     setConfigMode('YELLOW')
-    setYellowPoints([])
-    setRedPoints([])
     originalZonesRef.current = null
   }
 
@@ -203,10 +185,10 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
           <p style={{ fontSize: '0.62rem', letterSpacing: '0.2em', color: '#4b4f56', fontWeight: 600 }}
              className="mb-1 uppercase flex items-center gap-1.5">
             <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
-            {CAMERA_LABEL}
+            CAMARA EN VIVO • {LINKED_CAMERAS.find(c => c.id === activeCameraId)?.label || 'CAMARA'}
           </p>
           <h1 style={{ fontSize: '1.9rem', fontWeight: 600, color: '#f0f0f0', letterSpacing: '-0.02em' }}>
-            {CAMERA_NAME}
+            ESTACIÓN CENTRAL — {LINKED_CAMERAS.find(c => c.id === activeCameraId)?.label.split('-')[2] || 'ANDEN'}
           </h1>
         </div>
 
@@ -259,7 +241,8 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
 
               {/* Video feed image */}
               <img
-                src="http://localhost:8000/api/stream/video_feed"
+                key={activeCameraId}
+                src={`http://localhost:8000/api/stream/video_feed/${activeCameraId}`}
                 alt="Feed en vivo"
                 className="w-full h-full object-fill select-none pointer-events-none"
                 style={{ opacity: isConfiguring ? 0.6 : 1 }}
@@ -392,7 +375,8 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
                         headers: {
                           'Content-Type': 'application/json',
                           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-                        }
+                        },
+                        body: JSON.stringify({ camera_id: activeCameraId })
                       })
                       if (res.ok) {
                         const incident = await res.json()
@@ -497,31 +481,35 @@ export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId)
                            border: '1px solid #1a3451', borderRadius: 4,
                            padding: '2px 8px' }}
                   className="uppercase">
-              {LINKED_CAMERAS.length + 1} Cámaras activas
+              {LINKED_CAMERAS.length} Cámaras en total
             </span>
           </div>
 
           {/* Lista de cámaras */}
           <div className="flex flex-col gap-2">
-            {LINKED_CAMERAS.map((cam) => (
-              <button
-                key={cam.id}
-                type="button"
-                style={{ backgroundColor: '#161719', border: '1px solid #242628', borderRadius: 8,
-                         overflow: 'hidden', cursor: 'pointer', textAlign: 'left' }}
-                className="transition hover:border-[#3a3d41]"
-              >
-                {/* Thumbnail placeholder */}
-                <div style={{ backgroundColor: '#0a0b0d', height: 80,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <VideoCameraIcon size={20} color="#2a2d31" />
-                </div>
-                <p style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.12em',
-                            color: '#9ca3af', padding: '6px 10px', textTransform: 'uppercase' }}>
-                  {cam.label}
-                </p>
-              </button>
-            ))}
+            {LINKED_CAMERAS.map((cam) => {
+              const isActive = cam.id === activeCameraId;
+              return (
+                <button
+                  key={cam.id}
+                  type="button"
+                  onClick={() => setActiveCameraId(cam.id)}
+                  style={{ backgroundColor: isActive ? '#1c1e21' : '#161719', border: isActive ? '1px solid #38bdf8' : '1px solid #242628', borderRadius: 8,
+                           overflow: 'hidden', cursor: 'pointer', textAlign: 'left' }}
+                  className="transition hover:border-[#3a3d41]"
+                >
+                  {/* Thumbnail placeholder */}
+                  <div style={{ backgroundColor: '#0a0b0d', height: 80,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <VideoCameraIcon size={20} color={isActive ? "#38bdf8" : "#2a2d31"} />
+                  </div>
+                  <p style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.12em',
+                              color: isActive ? '#38bdf8' : '#9ca3af', padding: '6px 10px', textTransform: 'uppercase' }}>
+                    {cam.label}
+                  </p>
+                </button>
+              )
+            })}
           </div>
 
         </div>

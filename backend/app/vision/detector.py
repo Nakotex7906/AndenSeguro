@@ -58,6 +58,7 @@ class PersonDetector:
             imgsz=self.imgsz,
             half=True,
             device="0",
+            tracker="bytetrack.yaml",
         )
 
         detections: list[Detection] = []

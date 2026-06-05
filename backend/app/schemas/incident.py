@@ -8,6 +8,11 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class IncidentCreate(BaseModel):
+    """Payload para crear un incidente manual."""
+    camera_id: int
+
+
 class IncidentResponse(BaseModel):
     """Representación de un incidente para la API."""
 

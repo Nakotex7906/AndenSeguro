@@ -6,7 +6,7 @@ import type { IncidentAlert } from '../types/dashboard'
  * Obtiene la alerta activa mostrada en la vista de cámaras desde el WebSocket.
  * Escucha eventos de tipo "alert" emitidos por el motor de IA.
  */
-export function useIncidentAlerts(): {
+export function useIncidentAlerts(cameraId: number = 1): {
   data: IncidentAlert | null
   error: string | null
   isLoading: boolean
@@ -26,12 +26,13 @@ export function useIncidentAlerts(): {
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data)
-        if (payload.type === 'alert') {
+        if (payload.type === 'alert' && payload.camera_id === cameraId) {
           // payload.level: 'red' | 'orange'
           // payload.track_id: number
           // payload.zone: 'red' | 'yellow'
           // payload.time_in_zone: number
           // payload.bad_posture: boolean
+          // payload.camera_id: number
           
           setData(prevData => {
             const trackIdsStr = prevData?.trackIds ? 
@@ -44,10 +45,10 @@ export function useIncidentAlerts(): {
 
             return {
               title: payload.level === 'red' ? 'PELIGRO INMINENTE' : 'ADVERTENCIA',
-              cameraLabel: 'CAM-01-ANDEN PRINCIPAL',
+              cameraLabel: `CAM-${String(cameraId).padStart(2, '0')}`,
               elapsedSeconds: Math.floor(payload.time_in_zone),
               description: description,
-              location: 'Estación Central - Andén 1',
+              location: `Estación Central - Cámara ${cameraId}`,
               primaryActionLabel: 'Activar Protocolo',
               secondaryActionLabel: 'Falsa Alarma',
               supportResources: [
@@ -80,7 +81,7 @@ export function useIncidentAlerts(): {
       ws.close()
       clearInterval(cleanupInterval)
     }
-  }, [])
+  }, [cameraId])
 
   return { data, error, isLoading }
 }

@@ -17,6 +17,7 @@ from app.db.session import get_db
 from app.models.incident import Incident
 from app.models.user import User
 from app.schemas.incident import (
+    IncidentCreate,
     IncidentListResponse,
     IncidentResponse,
     IncidentStatusUpdate,
@@ -72,6 +73,7 @@ def get_incidents(
 
 @router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
 def create_manual_incident(
+    payload: IncidentCreate,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
@@ -80,7 +82,7 @@ def create_manual_incident(
 
     incident = create_incident(
         db=db,
-        camera_id=1,  # Por ahora asumimos cámara 1
+        camera_id=payload.camera_id,
         alert_level="red",
         description="Alerta de emergencia activada manualmente por operador.",
     )

@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from 'react'
 import { AppLayout } from './components/layout/AppLayout'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { IncidentsHistoryPage } from './pages/IncidentsHistoryPage'
 import { LiveCameraPage } from './pages/LiveCameraPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProtocolsPage } from './pages/ProtocolsPage'
@@ -53,6 +54,7 @@ function App(): ReactElement {
     activeView === 'dashboard' ? <DashboardPage /> :
     activeView === 'camera'    ? <LiveCameraPage onViewChange={handleViewChange} /> :
     activeView === 'protocols' ? <ProtocolsPage /> :
+    activeView === 'history'   ? <IncidentsHistoryPage onViewChange={handleViewChange} /> :
     activeView === 'users' && userRole === 'admin' ? <UsersPage /> :
     <ComingSoonPage viewId={activeView} />
 
