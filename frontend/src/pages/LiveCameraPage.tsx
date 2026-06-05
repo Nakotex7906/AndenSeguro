@@ -1,353 +1,177 @@
-import { useState, useRef, useEffect, type ReactElement, type MouseEvent } from 'react'
+import { BellIcon, SirenIcon, GearIcon, VideoCameraIcon } from '@phosphor-icons/react'
+import type { ReactElement } from 'react'
 
+import { MetricCard } from '../components/dashboard/MetricCard'
 import { Panel } from '../components/dashboard/Panel'
-import { useIncidentAlerts } from '../hooks/useIncidentAlerts'
-import { useLiveCameraOverview } from '../hooks/useLiveCameraOverview'
+import { Button } from '../components/ui/Button'
+import { useElapsedTimer } from '../hooks/useElapsedTimer'
+import type { DashboardMetric } from '../types/dashboard'
 
-type Point = { x: number; y: number }
-type CameraStats = { total_persons: number; risk_persons: number; danger_persons: number }
+/* ── Datos simulados (reemplazar con hooks reales al conectar backend) ── */
+const CAMERA_NAME   = 'ESTACION CENTRAL — ANDEN'
+const CAMERA_LABEL  = 'CAMARA EN VIVO  •  CAM-01-ANDEN'
+const REC_START     = 2532   // segundos grabados al montar
 
-/**
- * Renderiza la vista de monitoreo de cámara con la alerta activa.
- * @returns La pantalla de videovigilancia operativa.
- */
-export function LiveCameraPage(): ReactElement | null {
-  const { error: alertError } = useIncidentAlerts()
-  const { error: cameraError } = useLiveCameraOverview()
+const LINKED_CAMERAS = [
+  { id: 'cam-02', label: 'CAM-02-PASILLO',   thumb: null },
+  { id: 'cam-03', label: 'CAM-03-ENTRADA',   thumb: null },
+  { id: 'cam-04', label: 'CAM-04-ESCALERAS', thumb: null },
+  { id: 'cam-05', label: 'CAM-05-BOLETERIA', thumb: null },
+]
 
-  // Estados para configuración de zonas
-  const [isConfiguring, setIsConfiguring] = useState(false)
-  const [configMode, setConfigMode] = useState<'YELLOW' | 'RED' | 'DONE'>('YELLOW')
-  const [yellowPoints, setYellowPoints] = useState<Point[]>([])
-  const [redPoints, setRedPoints] = useState<Point[]>([])
-  
-  // Estado para estadísticas en tiempo real
-  const [stats, setStats] = useState<CameraStats>({
-    total_persons: 0,
-    risk_persons: 0,
-    danger_persons: 0
-  })
+const METRICS: DashboardMetric[] = [
+  { id: 'riesgo',    label: 'Riesgo por hora',    value: '04', unit: '/hrs', caption: 'Información', tone: 'blue'  },
+  { id: 'en-riesgo', label: 'Personas en riesgo', value: '01',              caption: 'Precaución',  tone: 'amber' },
+  { id: 'zona',     label: 'Personas en la zona', value: '11',              caption: 'Información', tone: 'blue'  },
+]
 
-  // Polling de estadísticas cada 1 segundo
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/stream/stats')
-        if (response.ok) {
-          const data = await response.json()
-          setStats(data)
-        }
-      } catch (error) {
-        // Silenciamos el error para no llenar la consola en caso de caída temporal del backend
-      }
-    }
-    const intervalId = setInterval(fetchStats, 1000)
-    return () => clearInterval(intervalId)
-  }, [])
-  
-  // Referencia a div para calcular posiciones relativas
-  const overlayRef = useRef<HTMLDivElement>(null)
+export function LiveCameraPage(): ReactElement {
+  const { elapsedTime: recTime } = useElapsedTimer(REC_START)
 
-  const handleOverlayClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (!isConfiguring || configMode === 'DONE' || !overlayRef.current) return
+  return (
+    <section className="space-y-4">
 
-    // Calcular el porcentaje respecto a las coordenadas del overlay superpuesto
-    const rect = overlayRef.current.getBoundingClientRect()
-    const x = (e.clientX - rect.left) / rect.width
-    const y = (e.clientY - rect.top) / rect.height
-
-    if (configMode === 'YELLOW') {
-      setYellowPoints((prev) => [...prev, { x, y }])
-    } else if (configMode === 'RED') {
-      setRedPoints((prev) => [...prev, { x, y }])
-    }
-  }
-
-  const handleNextStep = () => {
-    if (configMode === 'YELLOW' && yellowPoints.length >= 3) {
-      setConfigMode('RED')
-    } else if (configMode === 'RED' && redPoints.length >= 3) {
-      setConfigMode('DONE')
-    }
-  }
-
-  const handleSaveConfig = async () => {
-    try {
-      await fetch('http://localhost:8000/api/stream/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          yellow_points: yellowPoints.map(p => [p.x, p.y]),
-          red_points: redPoints.map(p => [p.x, p.y])
-        })
-      })
-      setIsConfiguring(false)
-      setConfigMode('YELLOW')
-      // notificación de éxito
-    } catch (err) {
-      console.error('Error guardando configuración', err)
-    }
-  }
-
-  const handleCancelConfig = () => {
-    setIsConfiguring(false)
-    setConfigMode('YELLOW')
-    setYellowPoints([])
-    setRedPoints([])
-  }
-
-  // Utilidad para dibujar polígonos SVG con porcentajes (0 a 1 -> 0 a 100%)
-  const createSvgPolygon = (points: Point[]) => {
-    if (points.length === 0) return ''
-    return points.map(p => `${p.x * 100},${p.y * 100}`).join(' ')
-  }
-
-  return alertError || cameraError ? (
-    <section className="surface-panel p-6">
-      <h1 className="text-2xl font-semibold text-white">Vista Cámara 1: Plataforma</h1>
-      <p className="mt-3 text-slate-300">{alertError ?? cameraError}</p>
-    </section>
-  ) : (
-    <section className="space-y-5">
-      {/* TODO: Aquí se debería llamar al backend para obtener el feed en vivo, detecciones, alertas y recursos asociados. */}
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+      {/* ── Cabecera ── */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-semibold tracking-tight text-white">
-            Vista Cámara 1: Plataforma
-          </h1>
-          <p className="mt-2 text-lg text-slate-300">
-            Monitorizando cámara principal en tiempo real.
+          <p style={{ fontSize: '0.62rem', letterSpacing: '0.2em', color: '#4b4f56', fontWeight: 600 }}
+             className="mb-1 uppercase flex items-center gap-1.5">
+            <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+            {CAMERA_LABEL}
           </p>
+          <h1 style={{ fontSize: '1.9rem', fontWeight: 600, color: '#f0f0f0', letterSpacing: '-0.02em' }}>
+            {CAMERA_NAME}
+          </h1>
         </div>
 
-        <div className={`surface-panel-strong rounded-2xl border ${stats.danger_persons > 0 ? 'border-red-500/80 bg-red-950/40 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : stats.risk_persons > 0 ? 'border-yellow-500/80 bg-yellow-950/40' : 'border-sky-500/30'} px-6 py-4 text-right transition-all duration-300`}>
-          <p className={`text-[0.65rem] font-semibold tracking-[0.22em] uppercase ${stats.danger_persons > 0 ? 'text-red-400' : stats.risk_persons > 0 ? 'text-yellow-400' : 'text-slate-400'}`}>
-            Estado de Operación
-          </p>
-          <div className="flex items-center justify-end gap-3 mt-1.5">
-            {stats.danger_persons > 0 && <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>}
-            <p className={`text-lg font-bold tracking-wide ${stats.danger_persons > 0 ? 'text-red-500' : stats.risk_persons > 0 ? 'text-yellow-500' : 'text-emerald-400'}`}>
-              {stats.danger_persons > 0 ? 'ALERTA CRÍTICA' : stats.risk_persons > 0 ? 'SOBREVIGILANCIA' : 'NORMAL'}
-            </p>
+        {/* Badges: personas + nivel de riesgo */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div style={{ backgroundColor: '#161719', border: '1px solid #242628', borderRadius: 8, padding: '8px 16px', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.55rem', letterSpacing: '0.18em', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Personas</p>
+            <p style={{ fontSize: '1.3rem', fontWeight: 700, color: '#f0f0f0', fontVariantNumeric: 'tabular-nums' }}>11</p>
+          </div>
+          <div style={{ backgroundColor: '#0e1929', border: '1px solid #1a3451', borderRadius: 8, padding: '8px 16px', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.55rem', letterSpacing: '0.18em', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Nivel de riesgo</p>
+            <p style={{ fontSize: '1.3rem', fontWeight: 700, color: '#38bdf8' }}>Bajo</p>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.8fr)]">
-        <div className="space-y-5">
-          <Panel
-            title="VideoFeed"
-            description={isConfiguring ? "Modo configuración: Haz clic en la imagen para dibujar" : "Feed de video en vivo de la estación"}
-            className="surface-panel p-5 relative"
-          >
-            {/* Contenedor centralizado con aspect-video para alinear coordenadas visuales y de cámara */}
-            <div className="relative flex w-full aspect-video items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black text-center text-slate-300 group max-h-[720px] mx-auto">
-              <img
-                src="http://localhost:8000/api/stream/video_feed"
-                alt="Stream en vivo"
-                className={`w-full h-full object-fill select-none pointer-events-none ${isConfiguring ? 'opacity-60' : ''}`}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.alt = "Feed no disponible. Revisa la conexión al backend.";
-                  target.className = "text-red-400 p-8";
-                }}
-              />
-              
-              {/* Capa de interacción y dibujo SVG (100% del contenedor) */}
-              <div
-                ref={overlayRef}
-                className="absolute inset-0 z-10 w-full h-full"
-                onClick={handleOverlayClick}
-                style={{ cursor: isConfiguring ? 'crosshair' : 'default' }}
-              >
-                {isConfiguring && (
-                  <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    {/* Relleno translúcido de ayuda y bordes */}
-                    {yellowPoints.length > 0 && (
-                      <polygon 
-                        points={createSvgPolygon(yellowPoints)} 
-                        fill="rgba(255, 204, 0, 0.2)" 
-                        stroke="#FFCC00" 
-                        strokeWidth="0.5" 
-                      />
-                    )}
-                    {redPoints.length > 0 && (
-                      <polygon 
-                        points={createSvgPolygon(redPoints)} 
-                        fill="rgba(255, 0, 0, 0.2)" 
-                        stroke="#FF0000" 
-                        strokeWidth="0.5" 
-                      />
-                    )}
-                    
-                    {/* Dibujar los puntos seleccionados para mejor UX */}
-                    {yellowPoints.map((p, i) => (
-                      <circle key={`yp-${i}`} cx={p.x * 100} cy={p.y * 100} r="0.8" fill="#FFCC00" />
-                    ))}
-                    {redPoints.map((p, i) => (
-                      <circle key={`rp-${i}`} cx={p.x * 100} cy={p.y * 100} r="0.8" fill="#FF0000" />
-                    ))}
-                  </svg>
-                )}
+      {/* ── Layout principal ── */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(14rem,0.7fr)]">
+
+        {/* ── Columna izquierda: feed + botones + métricas ── */}
+        <div className="flex flex-col gap-4">
+
+          {/* Feed de cámara */}
+          <Panel title="" description="">
+            <div style={{ position: 'relative', backgroundColor: '#0a0b0d', borderRadius: 8, overflow: 'hidden', minHeight: 320 }}
+                 className="flex items-center justify-center">
+
+              {/* Badge REC */}
+              <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.7)', border: '1px solid #ef444440', borderRadius: 6, padding: '3px 10px', fontSize: '0.65rem', fontWeight: 700, color: '#ef4444', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+                REC {recTime}
               </div>
 
-              {/* Interfaz de configuración superpuesta */}
-              {isConfiguring ? (
-                <div className="absolute bottom-4 inset-x-4 flex items-center justify-between bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-xl p-4 shadow-xl z-20">
-                  <div>
-                    <h3 className="text-white font-semibold text-sm">
-                      {configMode === 'YELLOW' && "Dibujando Zona de Precaución (Amarilla)"}
-                      {configMode === 'RED' && "Dibujando Zona de Peligro (Roja)"}
-                      {configMode === 'DONE' && "¡Zonas configuradas! Listo para guardar."}
-                    </h3>
-                    <p className="text-xs text-slate-300 mt-1">
-                      {configMode === 'YELLOW' && "Define al menos 3 puntos para enmarcar el polígono en la imagen."}
-                      {configMode === 'RED' && "Define al menos 3 puntos para abarcar el área roja."}
-                      {configMode === 'DONE' && "Revisa que los indicadores esten correctos."}
-                    </p>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button 
-                      onClick={handleCancelConfig}
-                      className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition"
-                    >
-                      Cancelar
-                    </button>
-                    {configMode !== 'DONE' ? (
-                      <button 
-                        onClick={handleNextStep}
-                        disabled={
-                          (configMode === 'YELLOW' && yellowPoints.length < 3) || 
-                          (configMode === 'RED' && redPoints.length < 3)
-                        }
-                        className="px-4 py-1.5 text-sm font-medium bg-sky-600 hover:bg-sky-500 disabled:opacity-50 disabled:hover:bg-sky-600 text-white rounded-lg transition shadow-sm"
-                      >
-                        Siguiente
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={handleSaveConfig}
-                        className="px-4 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-sm font-semibold"
-                      >
-                        Guardar Zonas
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                  <button 
-                    onClick={() => {
-                      setIsConfiguring(true)
-                      setYellowPoints([])
-                      setRedPoints([])
-                      setConfigMode('YELLOW')
-                    }}
-                    className="bg-slate-900/80 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium border border-white/10 backdrop-blur-md shadow-lg"
-                  >
-                    Configurar Zonas
-                  </button>
-                </div>
-              )}
+              {/* Placeholder feed */}
+              <div className="flex flex-col items-center gap-3" style={{ color: '#2a2d31' }}>
+                <VideoCameraIcon size={40} />
+                <p style={{ fontSize: '0.8rem', color: '#4b4f56' }}>
+                  Feed de cámara pendiente de integración con backend
+                </p>
+              </div>
+            </div>
+
+            {/* Botones de acción debajo del feed */}
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Button variant="ghost" size="md" fullWidth>
+                <GearIcon size={14} />
+                Configurar zona
+              </Button>
+              <Button variant="danger" size="md" fullWidth>
+                <SirenIcon size={14} />
+                Alerta emergencia
+              </Button>
             </div>
           </Panel>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/6 bg-slate-950/65 p-4 flex flex-col justify-center">
-              <p className="text-sm text-slate-400">Personas totales en vista</p>
-              <p className="mt-2 text-3xl font-semibold text-white">{stats.total_persons}</p>
-            </div>
-            <div className={`rounded-2xl border ${stats.risk_persons > 0 ? 'border-yellow-500/50 bg-yellow-500/10' : 'border-white/6 bg-slate-950/65'} p-4 flex flex-col justify-center transition-colors`}>
-              <p className={`text-sm ${stats.risk_persons > 0 ? 'text-yellow-400' : 'text-slate-400'}`}>Precaución / Merodeando</p>
-              <p className={`mt-2 text-3xl font-semibold ${stats.risk_persons > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.risk_persons}</p>
-            </div>
-            <div className={`rounded-2xl border ${stats.danger_persons > 0 ? 'border-red-500/50 bg-red-500/20' : 'border-white/6 bg-slate-950/65'} p-4 flex flex-col justify-center transition-colors`}>
-              <p className={`text-sm ${stats.danger_persons > 0 ? 'text-red-400 font-semibold uppercase tracking-wider' : 'text-slate-400'}`}>Personas en Zona Roja</p>
-              <p className={`mt-2 text-3xl font-semibold ${stats.danger_persons > 0 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{stats.danger_persons}</p>
-            </div>
+          {/* 3 MetricCards */}
+          <div className="grid grid-cols-3 gap-3">
+            {METRICS.map((m) => (
+              <MetricCard key={m.id} metric={m} />
+            ))}
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <Panel title="Descripción" className="surface-panel p-5">
-              {/* TODO: Este texto debería venir de la respuesta del backend con la descripción física de la persona detectada. */}
-              <p className="text-base leading-7 text-slate-300">
-                Se debería mostrar la descripción procedente del backend.
-              </p>
-            </Panel>
-
-            <Panel title="Ubicación" className="surface-panel p-5">
-              {/* TODO: Este dato debe llegar desde el backend como ubicación estimada del incidente. */}
-              <p className="text-base leading-7 text-slate-300">
-                Se debería mostrar la ubicación estimada procedente del backend.
-              </p>
-            </Panel>
-          </div>
-        </div>
-
-        <Panel
-          title="Acciones de protocolo"
-          description="Siguiente paso operativo sugerido para el incidente"
-          className="surface-panel p-5"
-        >
-          {/* TODO: Aquí el backend debería indicar las acciones recomendadas y el estado de la alerta. */}
-          <div className="flex flex-col gap-3">
-            <button
-              className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-600/90 px-4 py-4 text-left font-semibold text-white transition hover:bg-red-500"
-              type="button"
-            >
-              <span>Acción pendiente de backend</span>
-            </button>
-
-            <button
-              className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/6 px-4 py-4 text-left font-semibold text-slate-100 transition hover:border-slate-400/30 hover:bg-white/10"
-              type="button"
-            >
-              <span>Acción secundaria pendiente de backend</span>
-            </button>
-          </div>
-
-          <div className="mt-6">
-            <h3 className="text-sm font-semibold tracking-[0.16em] text-slate-200 uppercase">
-              Redes de apoyo disponibles
-            </h3>
-
-            {/* TODO: Este listado debe venir desde el backend con los recursos de apoyo disponibles. */}
-            <div className="mt-3 space-y-3">
-              <article className="flex items-center justify-between rounded-xl border border-white/6 bg-slate-950/60 px-4 py-3">
-                <div>
-                  <p className="font-medium text-white">Recursos de apoyo</p>
-                  <p className="text-sm text-slate-400">Pendiente de backend</p>
+          {/* ── Card de Alertas Críticas ── */}
+          <Panel title="" description="">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 pb-2" style={{ borderBottom: '1px solid #242628' }}>
+                <BellIcon size={18} color="#ef4444" />
+                <h3 style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.1em', color: '#f0f0f0', textTransform: 'uppercase' }}>
+                  Alertas Críticas de la Estación
+                </h3>
+              </div>
+              <div style={{ backgroundColor: '#1a0808', border: '1px solid #3d1212', borderRadius: 8, padding: '12px 16px' }} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+                  <div>
+                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f87171' }}>Objeto sospechoso detectado en vía</p>
+                    <p style={{ fontSize: '0.65rem', color: '#6b7280' }}>Hace 3 minutos • CAM-01-ANDEN</p>
+                  </div>
                 </div>
-                <span className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs font-semibold tracking-[0.14em] text-slate-200 uppercase">
-                  Integración pendiente
+                <span style={{ fontSize: '0.6rem', fontWeight: 700, backgroundColor: '#3d1212', color: '#f87171', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
+                  Activa
                 </span>
-              </article>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-white/6 bg-slate-950/60 p-4">
-            <h3 className="text-sm font-semibold tracking-[0.16em] text-slate-200 uppercase">
-              Cámaras relacionadas
-            </h3>
-            {/* TODO: El backend debe devolver cámaras relacionadas y acciones por cada una. */}
-            <div className="mt-3 grid gap-3">
-              <div className="flex items-center justify-between rounded-xl border border-white/6 bg-white/5 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-100">Cámaras relacionadas</p>
-                  <p className="text-xs tracking-[0.14em] text-slate-500 uppercase">
-                    Pendiente de backend
-                  </p>
-                </div>
-                <button
-                  className="rounded-full border border-white/10 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200"
-                  type="button"
-                >
-                  Ver
-                </button>
               </div>
             </div>
+          </Panel>
+
+        </div>
+
+        {/* ── Columna derecha: cámaras vinculadas ── */}
+        <div className="flex flex-col gap-4">
+
+          {/* Header cámaras vinculadas */}
+          <div className="flex items-center justify-between">
+            <p style={{ fontSize: '0.62rem', letterSpacing: '0.2em', color: '#4b4f56', fontWeight: 600 }}
+               className="uppercase">
+              Cámaras vinculadas
+            </p>
+            <span style={{ fontSize: '0.62rem', letterSpacing: '0.14em', fontWeight: 700,
+                           backgroundColor: '#0e1929', color: '#38bdf8',
+                           border: '1px solid #1a3451', borderRadius: 4,
+                           padding: '2px 8px' }}
+                  className="uppercase">
+              {LINKED_CAMERAS.length + 1} Cámaras activas
+            </span>
           </div>
-        </Panel>
+
+          {/* Lista de cámaras */}
+          <div className="flex flex-col gap-2">
+            {LINKED_CAMERAS.map((cam) => (
+              <button
+                key={cam.id}
+                type="button"
+                style={{ backgroundColor: '#161719', border: '1px solid #242628', borderRadius: 8,
+                         overflow: 'hidden', cursor: 'pointer', textAlign: 'left' }}
+                className="transition hover:border-[#3a3d41]"
+              >
+                {/* Thumbnail placeholder */}
+                <div style={{ backgroundColor: '#0a0b0d', height: 80,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <VideoCameraIcon size={20} color="#2a2d31" />
+                </div>
+                <p style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.12em',
+                            color: '#9ca3af', padding: '6px 10px', textTransform: 'uppercase' }}>
+                  {cam.label}
+                </p>
+              </button>
+            ))}
+          </div>
+
+        </div>
+
       </div>
     </section>
   )
