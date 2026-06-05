@@ -1,9 +1,8 @@
-import { ClipboardTextIcon, FileXIcon } from '@phosphor-icons/react'
+import { ClipboardTextIcon, FileXIcon, VideoCameraIcon } from '@phosphor-icons/react'
 import type { ReactElement } from 'react'
 
 import { Panel } from '../components/dashboard/Panel'
 import { AlertSignalSelector } from '../components/protocols/AlertSignalSelector'
-import { CameraFeedPlaceholder } from '../components/protocols/CameraFeedPlaceholder'
 import { NotesLog } from '../components/protocols/NotesLog'
 import { ProtocolSteps } from '../components/protocols/ProtocolSteps'
 import { ResponseChannels } from '../components/protocols/ResponseChannels'
@@ -22,6 +21,10 @@ import { useElapsedTimer } from '../hooks/useElapsedTimer'
  *   ProtocolSteps, ResponseChannels, NotesLog, CameraFeedPlaceholder.
  */
 export function ProtocolsPage(): ReactElement {
+  const searchParams = new URLSearchParams(window.location.search)
+  const incidentIdParam = searchParams.get('incidentId')
+  const incidentId = incidentIdParam ? parseInt(incidentIdParam, 10) : 1
+
   const {
     protocol,
     toggleStep,
@@ -31,7 +34,7 @@ export function ProtocolsPage(): ReactElement {
     callChannel,
     generateDerivationSheet,
     registerRejection,
-  } = useActiveProtocol()
+  } = useActiveProtocol(incidentId)
 
   const { elapsedTime } = useElapsedTimer(protocol.elapsedSeconds)
 
@@ -122,7 +125,30 @@ export function ProtocolsPage(): ReactElement {
 
           {/* Feed de cámara */}
           <Panel title="Cámara en vivo" description={protocol.station}>
-            <CameraFeedPlaceholder label={protocol.station} />
+            <div style={{ position: 'relative', backgroundColor: '#0a0b0d', borderRadius: 8, overflow: 'hidden', minHeight: 220 }}
+                 className="flex items-center justify-center aspect-video w-full">
+              <img
+                src="http://localhost:8000/api/stream/video_feed"
+                alt="Feed en vivo"
+                className="w-full h-full object-fill select-none pointer-events-none"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const placeholder = document.getElementById('protocol-camera-placeholder');
+                  if (placeholder) placeholder.style.display = 'flex';
+                }}
+              />
+              <div 
+                id="protocol-camera-placeholder"
+                className="absolute inset-0 flex flex-col items-center justify-center gap-3" 
+                style={{ color: '#2a2d31', display: 'none' }}
+              >
+                <VideoCameraIcon size={40} />
+                <p style={{ fontSize: '0.8rem', color: '#ef4444' }}>
+                  Feed no disponible.
+                </p>
+              </div>
+            </div>
           </Panel>
 
           {/* Canales de respuesta rápida */}

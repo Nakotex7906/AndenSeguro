@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button'
 import { useElapsedTimer } from '../hooks/useElapsedTimer'
 import { useIncidentAlerts } from '../hooks/useIncidentAlerts'
 import { useLiveCameraOverview } from '../hooks/useLiveCameraOverview'
-import type { DashboardMetric } from '../types/dashboard'
+import type { DashboardMetric, ViewId } from '../types/dashboard'
 
 type Point = { x: number; y: number }
 type CameraStats = { total_persons: number; risk_persons: number; danger_persons: number }
@@ -23,8 +23,8 @@ const LINKED_CAMERAS = [
   { id: 'cam-05', label: 'CAM-05-BOLETERIA', thumb: null },
 ]
 
-export function LiveCameraPage(): ReactElement | null {
-  const { error: alertError } = useIncidentAlerts()
+export function LiveCameraPage({ onViewChange }: { onViewChange?: (view: ViewId) => void }): ReactElement | null {
+  const { data: alertData, error: alertError } = useIncidentAlerts()
   const { error: cameraError } = useLiveCameraOverview()
   const { elapsedTime: recTime } = useElapsedTimer(REC_START)
 
@@ -384,8 +384,26 @@ export function LiveCameraPage(): ReactElement | null {
                   variant="danger" 
                   size="md" 
                   fullWidth
-                  onClick={() => {
-                    console.log("Alerta de emergencia activada manualmente.")
+                  onClick={async () => {
+                    try {
+                      // Usar el token del storage si usamos auth, acá asumo que pasa derecho si es dev
+                      const res = await fetch('http://localhost:8000/api/incidents', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+                        }
+                      })
+                      if (res.ok) {
+                        const incident = await res.json()
+                        window.history.pushState({}, '', `/?incidentId=${incident.id}`)
+                        if (onViewChange) onViewChange('protocols')
+                      } else {
+                        console.error('Failed to create manual incident', await res.text())
+                      }
+                    } catch (err) {
+                      console.error('Error on manual alert:', err)
+                    }
                   }}
                 >
                   <SirenIcon size={14} />
@@ -411,42 +429,55 @@ export function LiveCameraPage(): ReactElement | null {
                   Alertas Críticas de la Estación
                 </h3>
               </div>
-              <div style={{ 
-                backgroundColor: stats.danger_persons > 0 ? '#2d0a0a' : '#1a0808', 
-                border: stats.danger_persons > 0 ? '1px solid #ef4444' : '1px solid #3d1212', 
-                borderRadius: 8, 
-                padding: '12px 16px' 
-              }} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span style={{ 
-                    width: 8, 
-                    height: 8, 
-                    borderRadius: '50%', 
-                    backgroundColor: '#ef4444', 
-                    display: 'inline-block',
-                    animation: stats.danger_persons > 0 ? 'pulse 1s infinite' : 'none'
-                  }} />
-                  <div>
-                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f87171' }}>
-                      {stats.danger_persons > 0 ? 'Persona detectada cruzando la línea amarilla' : 'Objeto sospechoso detectado en vía'}
-                    </p>
-                    <p style={{ fontSize: '0.65rem', color: '#6b7280' }}>
-                      {stats.danger_persons > 0 ? 'Tiempo real' : 'Hace 3 minutos'} • CAM-01-ANDEN
-                    </p>
+              {alertData ? (
+                <div style={{ 
+                  backgroundColor: alertData.title === 'PELIGRO INMINENTE' ? '#2d0a0a' : '#261a05', 
+                  border: alertData.title === 'PELIGRO INMINENTE' ? '1px solid #ef4444' : '1px solid #f59e0b', 
+                  borderRadius: 8, 
+                  padding: '12px 16px' 
+                }} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span style={{ 
+                      width: 8, 
+                      height: 8, 
+                      borderRadius: '50%', 
+                      backgroundColor: alertData.title === 'PELIGRO INMINENTE' ? '#ef4444' : '#f59e0b', 
+                      display: 'inline-block',
+                      animation: 'pulse 1s infinite'
+                    }} />
+                    <div>
+                      <p style={{ fontSize: '0.8rem', fontWeight: 600, color: alertData.title === 'PELIGRO INMINENTE' ? '#f87171' : '#fbbf24' }}>
+                        {alertData.description}
+                      </p>
+                      <p style={{ fontSize: '0.65rem', color: '#6b7280' }}>
+                        Hace {alertData.elapsedSeconds}s • {alertData.cameraLabel}
+                      </p>
+                    </div>
                   </div>
+                  <span style={{ 
+                    fontSize: '0.6rem', 
+                    fontWeight: 700, 
+                    backgroundColor: alertData.title === 'PELIGRO INMINENTE' ? '#ef4444' : '#f59e0b', 
+                    color: alertData.title === 'PELIGRO INMINENTE' ? '#ffffff' : '#000000', 
+                    padding: '2px 6px', 
+                    borderRadius: 4, 
+                    textTransform: 'uppercase' 
+                  }}>
+                    {alertData.title}
+                  </span>
                 </div>
-                <span style={{ 
-                  fontSize: '0.6rem', 
-                  fontWeight: 700, 
-                  backgroundColor: stats.danger_persons > 0 ? '#ef4444' : '#3d1212', 
-                  color: stats.danger_persons > 0 ? '#ffffff' : '#f87171', 
-                  padding: '2px 6px', 
-                  borderRadius: 4, 
-                  textTransform: 'uppercase' 
+              ) : (
+                <div style={{ 
+                  backgroundColor: '#161719', 
+                  border: '1px solid #242628', 
+                  borderRadius: 8, 
+                  padding: '12px 16px',
+                  display: 'flex',
+                  justifyContent: 'center'
                 }}>
-                  {stats.danger_persons > 0 ? 'CRÍTICA' : 'Activa'}
-                </span>
-              </div>
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>No hay alertas activas en esta cámara.</p>
+                </div>
+              )}
             </div>
           </Panel>
 

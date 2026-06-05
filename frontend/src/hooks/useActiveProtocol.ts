@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 
 import type { ActiveProtocol, OperatorNote, RiskLevel } from '../types/dashboard'
 
@@ -6,11 +6,7 @@ import type { ActiveProtocol, OperatorNote, RiskLevel } from '../types/dashboard
  * Hook principal de la vista de Protocolos.
  * Gestiona el estado local del incidente activo: pasos, nivel de riesgo,
  * señales de alerta, notas del operador y cierre de protocolo.
- *
- * TODO (backend): al montar, suscribirse a ws://.../api/alerts/ws para
- * recibir el incidente activo y su estado inicial. Cada acción del operador
- * (completar paso, asignar riesgo, agregar nota) debe emitir un evento
- * POST /api/incidents/{id}/actions para persistirlo.
+ * Hidrata el estado inicial desde el backend usando la base de datos.
  */
 export function useActiveProtocol(incidentId: number = 1): {
   protocol: ActiveProtocol
@@ -77,10 +73,59 @@ export function useActiveProtocol(incidentId: number = 1): {
       { id: 'c6', label: 'Carabineros', phone: '133',       icon: 'police',       tone: 'slate'   },
     ],
 
-    notes: [
-      { id: 'n0', timestamp: formatNow(), text: 'Protocolo iniciado automáticamente por detección de IA.' },
-    ],
+    notes: [],
   })
+
+  useEffect(() => {
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/protocol-state`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.incident) return
+
+        const startTime = new Date(data.incident.timestamp).getTime()
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+
+        const hydratedNotes = data.notes.map((n: any) => ({
+          id: `n${n.id}`,
+          timestamp: new Date(n.timestamp).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
+          text: n.text
+        }))
+
+        const riskActions = data.actions.filter((a: any) => a.action_type === 'risk_level')
+        const finalRiskLevel = riskActions.length > 0 ? riskActions[riskActions.length - 1].action_value : null
+
+        const stepToggles = data.actions.filter((a: any) => a.action_type === 'step_toggle')
+        const stepCounts: Record<string, number> = {}
+        stepToggles.forEach((a: any) => {
+          stepCounts[a.action_value] = (stepCounts[a.action_value] || 0) + 1
+        })
+        
+        const signalToggles = data.actions.filter((a: any) => a.action_type === 'signal_toggle')
+        const signalCounts: Record<string, number> = {}
+        signalToggles.forEach((a: any) => {
+          signalCounts[a.action_value] = (signalCounts[a.action_value] || 0) + 1
+        })
+
+        setProtocol(prev => ({
+          ...prev,
+          incidentLabel: `INCIDENTE #${data.incident.id} ACTIVO`,
+          elapsedSeconds: elapsed,
+          riskLevel: finalRiskLevel,
+          notes: hydratedNotes.length > 0 ? hydratedNotes : prev.notes,
+          steps: prev.steps.map(s => ({
+            ...s,
+            completed: (stepCounts[s.id] || 0) % 2 !== 0
+          })),
+          alertSignals: prev.alertSignals.map(s => ({
+            ...s,
+            selected: (signalCounts[s.id] || 0) % 2 !== 0
+          }))
+        }))
+      })
+      .catch(console.error)
+  }, [incidentId])
 
   /** Marca/desmarca un paso como completado */
   const toggleStep = useCallback((stepId: string) => {
@@ -93,7 +138,10 @@ export function useActiveProtocol(incidentId: number = 1): {
     
     fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
       body: JSON.stringify({ type: 'step_toggle', value: stepId })
     }).catch(console.error)
   }, [incidentId])
@@ -104,7 +152,10 @@ export function useActiveProtocol(incidentId: number = 1): {
     
     fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
       body: JSON.stringify({ type: 'risk_level', value: level })
     }).catch(console.error)
   }, [incidentId])
@@ -120,7 +171,10 @@ export function useActiveProtocol(incidentId: number = 1): {
     
     fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
       body: JSON.stringify({ type: 'signal_toggle', value: signalId })
     }).catch(console.error)
   }, [incidentId])
@@ -144,7 +198,10 @@ export function useActiveProtocol(incidentId: number = 1): {
     
     fetch(`http://localhost:8000/api/incidents/${incidentId}/notes`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
       body: JSON.stringify({ text: text.trim() })
     }).catch(console.error)
   }, [incidentId])
@@ -157,7 +214,10 @@ export function useActiveProtocol(incidentId: number = 1): {
     
     fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
       body: JSON.stringify({ type: 'channel_call', value: channelId })
     }).catch(console.error)
   }, [incidentId, protocol.channels])
@@ -166,6 +226,7 @@ export function useActiveProtocol(incidentId: number = 1): {
   const generateDerivationSheet = useCallback(() => {
     fetch(`http://localhost:8000/api/incidents/${incidentId}/derivation-sheet`, {
       method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
     })
     .then(res => res.json())
     .then(data => alert(data.message))
@@ -176,6 +237,7 @@ export function useActiveProtocol(incidentId: number = 1): {
   const registerRejection = useCallback(() => {
     fetch(`http://localhost:8000/api/incidents/${incidentId}/rejection`, {
       method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
     })
     .then(res => res.json())
     .then(data => alert(data.message))

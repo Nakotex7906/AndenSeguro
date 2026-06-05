@@ -1,4 +1,4 @@
-export type ViewId = 'dashboard' | 'camera' | 'alerts' | 'protocols' | 'history'
+export type ViewId = 'dashboard' | 'camera' | 'alerts' | 'protocols' | 'history' | 'users'
 export type Tone = 'slate' | 'blue' | 'amber' | 'red' | 'emerald' | 'purple' | 'gray' | 'orange' | 'pink'
 
 export interface DashboardMetric {
@@ -45,6 +45,7 @@ export interface IncidentAlert {
   primaryActionLabel: string
   secondaryActionLabel: string
   supportResources: SupportResource[]
+  trackIds?: number[]
 }
 
 export interface CameraInsight {

@@ -70,6 +70,23 @@ def get_incidents(
     )
 
 
+@router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
+def create_manual_incident(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Crea un incidente manual provocado por el operador."""
+    from app.services.incident_service import create_incident
+
+    incident = create_incident(
+        db=db,
+        camera_id=1,  # Por ahora asumimos cámara 1
+        alert_level="red",
+        description="Alerta de emergencia activada manualmente por operador.",
+    )
+    return incident
+
+
 @router.get("/{incident_id}", response_model=IncidentResponse)
 def get_incident(
     incident_id: int,
@@ -84,6 +101,37 @@ def get_incident(
             detail="Incidente no encontrado",
         )
     return incident
+
+
+@router.get("/{incident_id}/protocol-state")
+def get_incident_protocol_state(
+    incident_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _user: Annotated[User, Depends(get_current_user)],
+):
+    """Devuelve el estado completo del protocolo para un incidente (acciones y notas)."""
+    from app.models.incident_actions import IncidentAction, IncidentNote
+
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente no encontrado",
+        )
+
+    actions = db.exec(
+        select(IncidentAction).where(IncidentAction.incident_id == incident_id)
+    ).all()
+    
+    notes = db.exec(
+        select(IncidentNote).where(IncidentNote.incident_id == incident_id).order_by(IncidentNote.timestamp.asc())
+    ).all()
+
+    return {
+        "incident": IncidentResponse.model_validate(incident).model_dump(),
+        "actions": [a.model_dump() for a in actions],
+        "notes": [n.model_dump() for n in notes]
+    }
 
 
 @router.patch("/{incident_id}/status", response_model=IncidentResponse)
