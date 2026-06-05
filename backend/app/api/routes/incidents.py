@@ -20,6 +20,10 @@ from app.schemas.incident import (
     IncidentListResponse,
     IncidentResponse,
     IncidentStatusUpdate,
+    IncidentActionCreate,
+    IncidentActionResponse,
+    IncidentNoteCreate,
+    IncidentNoteResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,3 +127,149 @@ def update_incident_status(
         f"por {current_user.username}"
     )
     return incident
+
+
+@router.post("/{incident_id}/actions", response_model=IncidentActionResponse)
+def add_incident_action(
+    incident_id: int,
+    body: IncidentActionCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Registra una acción estructurada tomada por el operador en el protocolo.
+    """
+    from app.models.incident_actions import IncidentAction
+
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente no encontrado",
+        )
+
+    action = IncidentAction(
+        incident_id=incident_id,
+        actor_id=current_user.id,
+        action_type=body.type,
+        action_value=body.value,
+    )
+    db.add(action)
+    db.commit()
+    db.refresh(action)
+
+    logger.info(f"Acción '{body.type}' registrada en incidente #{incident_id} por {current_user.username}")
+    return action
+
+
+@router.post("/{incident_id}/notes", response_model=IncidentNoteResponse)
+def add_incident_note(
+    incident_id: int,
+    body: IncidentNoteCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Registra una nota de texto introducida por el operador.
+    """
+    from app.models.incident_actions import IncidentNote
+
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente no encontrado",
+        )
+
+    note = IncidentNote(
+        incident_id=incident_id,
+        author_id=current_user.id,
+        text=body.text,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+
+    logger.info(f"Nota agregada en incidente #{incident_id} por {current_user.username}")
+    return note
+
+
+@router.post("/{incident_id}/derivation-sheet")
+def generate_derivation_sheet(
+    incident_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Genera la ficha de derivación. Por ahora retorna un success simulando
+    la generación de un PDF, según lo acordado en el plan.
+    """
+    from app.models.incident_actions import IncidentAction
+
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente no encontrado",
+        )
+
+    # Registrar la acción de generación
+    action = IncidentAction(
+        incident_id=incident_id,
+        actor_id=current_user.id,
+        action_type="derivation_sheet_generated",
+        action_value="true",
+    )
+    db.add(action)
+    db.commit()
+
+    logger.info(f"Ficha de derivación generada para incidente #{incident_id} por {current_user.username}")
+    
+    return {
+        "status": "success",
+        "message": "Ficha de derivación generada exitosamente",
+        "url": f"/api/incidents/{incident_id}/derivation-sheet/download" # Mock URL
+    }
+
+
+@router.post("/{incident_id}/rejection")
+def register_rejection(
+    incident_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Registra el rechazo de atención modelado como una IncidentAction.
+    """
+    from app.models.incident_actions import IncidentAction
+
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente no encontrado",
+        )
+
+    # Registrar la acción de rechazo
+    action = IncidentAction(
+        incident_id=incident_id,
+        actor_id=current_user.id,
+        action_type="rejection",
+        action_value="true",
+    )
+    
+    # Podríamos actualizar el estado del incidente a resuelto aquí
+    incident.status = "resolved"
+    incident.resolved_by = current_user.id
+    incident.resolved_at = datetime.now(timezone.utc)
+    
+    db.add(action)
+    db.add(incident)
+    db.commit()
+
+    logger.info(f"Rechazo de atención registrado para incidente #{incident_id} por {current_user.username}")
+    
+    return {
+        "status": "success",
+        "message": "Rechazo de atención registrado correctamente."
+    }

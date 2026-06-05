@@ -12,7 +12,7 @@ import type { ActiveProtocol, OperatorNote, RiskLevel } from '../types/dashboard
  * (completar paso, asignar riesgo, agregar nota) debe emitir un evento
  * POST /api/incidents/{id}/actions para persistirlo.
  */
-export function useActiveProtocol(): {
+export function useActiveProtocol(incidentId: number = 1): {
   protocol: ActiveProtocol
   toggleStep:       (stepId: string) => void
   setRiskLevel:     (level: RiskLevel) => void
@@ -90,14 +90,24 @@ export function useActiveProtocol(): {
         s.id === stepId ? { ...s, completed: !s.completed } : s
       ),
     }))
-    /* TODO (backend): POST /api/incidents/{id}/actions { type: 'step_toggle', stepId } */
-  }, [])
+    
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'step_toggle', value: stepId })
+    }).catch(console.error)
+  }, [incidentId])
 
   /** Asigna el nivel de riesgo C-SSRS */
   const setRiskLevel = useCallback((level: RiskLevel) => {
     setProtocol((prev) => ({ ...prev, riskLevel: level }))
-    /* TODO (backend): POST /api/incidents/{id}/actions { type: 'risk_level', level } */
-  }, [])
+    
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'risk_level', value: level })
+    }).catch(console.error)
+  }, [incidentId])
 
   /** Selecciona/deselecciona una señal de alerta observable */
   const toggleSignal = useCallback((signalId: string) => {
@@ -107,8 +117,13 @@ export function useActiveProtocol(): {
         s.id === signalId ? { ...s, selected: !s.selected } : s
       ),
     }))
-    /* TODO (backend): POST /api/incidents/{id}/actions { type: 'signal_toggle', signalId } */
-  }, [])
+    
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'signal_toggle', value: signalId })
+    }).catch(console.error)
+  }, [incidentId])
 
   /** Agrega una nota del operador con timestamp */
   const addNote = useCallback((text: string) => {
@@ -126,34 +141,46 @@ export function useActiveProtocol(): {
     }
     const note: OperatorNote = { id: `n${Date.now()}`, timestamp: formatNow(), text: text.trim() }
     setProtocol((prev) => ({ ...prev, notes: [...prev.notes, note] }))
-    /* TODO (backend): POST /api/incidents/{id}/notes { text, timestamp } */
-  }, [])
+    
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.trim() })
+    }).catch(console.error)
+  }, [incidentId])
 
   /** Simula la llamada a un canal de respuesta */
   const callChannel = useCallback((channelId: string) => {
     const ch = protocol.channels.find((c) => c.id === channelId)
     if (!ch) return
-    /* TODO (backend): POST /api/incidents/{id}/actions { type: 'channel_call', channelId }
-     * que registra el contacto y notifica al personal en terreno. */
     console.info(`[Protocolo] Contactando ${ch.label} — ${ch.phone}`)
-  }, [protocol.channels])
+    
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'channel_call', value: channelId })
+    }).catch(console.error)
+  }, [incidentId, protocol.channels])
 
   /** Genera ficha de derivación a centro de salud */
   const generateDerivationSheet = useCallback(() => {
-    /* TODO (backend): POST /api/incidents/{id}/derivation-sheet
-     * que autocompleta la ficha con antecedentes del incidente y nivel de riesgo
-     * y retorna un PDF descargable.
-     * Por ahora abre una alerta informativa. */
-    alert('Ficha de derivación generada. Se enviará al servicio de urgencia.')
-  }, [])
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/derivation-sheet`, {
+      method: 'POST',
+    })
+    .then(res => res.json())
+    .then(data => alert(data.message))
+    .catch(console.error)
+  }, [incidentId])
 
   /** Registra el rechazo formal de atención por parte de la persona */
   const registerRejection = useCallback(() => {
-    /* TODO (backend): POST /api/incidents/{id}/rejection
-     * que guarda el formulario de "Delegación de Responsabilidades"
-     * con firma digital del operador y marca el incidente como cerrado-rechazado. */
-    alert('Delegación de responsabilidades registrada.')
-  }, [])
+    fetch(`http://localhost:8000/api/incidents/${incidentId}/rejection`, {
+      method: 'POST',
+    })
+    .then(res => res.json())
+    .then(data => alert(data.message))
+    .catch(console.error)
+  }, [incidentId])
 
   return {
     protocol,
