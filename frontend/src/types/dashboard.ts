@@ -63,3 +63,52 @@ export interface LiveCameraOverview {
   insights: CameraInsight[]
   supportResources: SupportResource[]
 }
+/* ── PROTOCOLOS ─────────────────────────────────────────────────── */
+
+/** Nivel de riesgo según escala C-SSRS */
+export type RiskLevel = 'leve' | 'moderado' | 'alto'
+
+/** Una señal de alerta observable seleccionable por el operador */
+export interface AlertSignal {
+  id: string
+  label: string
+  selected: boolean
+}
+
+/** Un paso del protocolo operativo con estado de completitud */
+export interface ProtocolStep {
+  id: string
+  title: string
+  description: string
+  completed: boolean
+}
+
+/** Canal de respuesta rápida disponible */
+export interface ResponseChannel {
+  id: string
+  label: string
+  phone: string
+  icon: 'security' | 'firefighters' | 'paramedics' | 'megaphone' | 'health' | 'police'
+  tone: Tone
+}
+
+/** Nota registrada por el operador con timestamp */
+export interface OperatorNote {
+  id: string
+  timestamp: string
+  text: string
+}
+
+/** Estado completo del incidente activo en la vista de protocolos */
+export interface ActiveProtocol {
+  incidentLabel: string
+  location: string
+  station: string
+  elapsedSeconds: number
+  affectedPersons: number
+  riskLevel: RiskLevel | null
+  alertSignals: AlertSignal[]
+  steps: ProtocolStep[]
+  channels: ResponseChannel[]
+  notes: OperatorNote[]
+}
