@@ -15,14 +15,11 @@
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-query": "^5.96.0",
-    "clsx": "^2.1.1",
-    "expo": "^56.0.8",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2",
     "react-use-websocket": "^4.13.0",
-    "tailwind-merge": "^3.5.0",
-    "zustand": "^5.0.12"
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
