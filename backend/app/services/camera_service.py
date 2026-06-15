@@ -16,6 +16,11 @@ from app.core.websocket_manager import ws_manager
 from app.vision.detector import PersonDetector
 from app.vision.pose import PoseAnalyzer
 from app.vision.risk import RiskEvaluator, RiskLevel
+from concurrent.futures import ThreadPoolExecutor
+from sqlmodel import Session
+from app.db.session import engine
+from app.services.vision_service import vision_service
+from app.services.incident_service import create_incident
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -54,6 +59,7 @@ class CameraService:
         # Cooldown de alertas para evitar duplicados (track_id -> last_alert_time)
         self._alert_cooldown: dict[int, float] = {}
         self._alert_cooldown_seconds = 10.0
+        self._background_executor = ThreadPoolExecutor(max_workers=3)
 
     def _resolve_video_source(self):
         """Determina la fuente de video."""
@@ -86,6 +92,73 @@ class CameraService:
             self._alert_cooldown[track_id] = current
             return True
         return False
+    
+    def _extract_focused_roi(self, frame: np.ndarray, bbox: list[int], padding_percentage: float = 0.15) -> np.ndarray:
+        """
+        Extrae la Región de Interés (ROI) del frame basándose en la bounding box,
+        aplicando un margen de contexto para que la IA entienda el entorno.
+        """
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = map(int, bbox)
+
+        box_w = x2 - x1
+        box_h = y2 - y1
+
+        pad_w = int(box_w * padding_percentage)
+        pad_h = int(box_h * padding_percentage)
+
+        x1_padded = max(0, x1 - pad_w)
+        y1_padded = max(0, y1 - pad_h)
+        x2_padded = min(w, x2 + pad_w)
+        y2_padded = min(h, y2 + pad_h)
+
+        return frame[y1_padded:y2_padded, x1_padded:x2_padded]
+
+    def _async_vision_and_persistence_worker(self, frame_roi: np.ndarray, alert_level: str):
+        """
+        Trabajador ejecutado en segundo plano por el ThreadPool. 
+        Consume la API de Groq y persiste el incidente enriquecido en la BD.
+        """
+        logger.info(f"Iniciando análisis de visión con Groq en background para alerta: {alert_level}")
+        
+        # Llamar al servicio de IA 
+        ia_description = vision_service.analyze_incident_zone(frame_roi, alert_level)
+        logger.info(f"Descripción obtenida de la IA: '{ia_description}'")
+
+        # Persistencia en Base de Datos usando la sesión on-demand
+        try:
+            with Session(engine) as session:
+                incident = create_incident(
+                    db=session,
+                    camera_id=self.camera_id,
+                    alert_level=alert_level,
+                    description=ia_description
+                )
+                logger.info(f"Incidente #{incident.id} guardado con éxito y enriquecido con IA.")
+                
+                # TODO Disparar la Push Notification a la App Móvil aquí
+                # enviando incident.id, ia_description y la referencia visual.
+                
+        except Exception as e:
+            logger.error(f"Error al persistir el incidente enriquecido en segundo plano: {e}")
+
+    def _process_and_dispatch_snapshot(self, frame: np.ndarray, bbox: list[int], alert_level: str):
+        """
+        Extrae el snapshot y delega el análisis pesado al pool de hilos de fondo.
+        Garantiza que el loop principal 'generate_frames' recupere el control de inmediato.
+        """
+        try:
+            # Recortar la imagen en el hilo de procesamiento de video
+            frame_roi = self._extract_focused_roi(frame, bbox)
+            
+            # Enviar la tarea pesada al ejecutor de hilos sin bloquear el stream
+            self._background_executor.submit(
+                self._async_vision_and_persistence_worker,
+                frame_roi,
+                alert_level
+            )
+        except Exception as e:
+            logger.error(f"Fallo al empaquetar y despachar el snapshot: {e}")
 
     def generate_frames(self):
         """Generador de frames procesados para streaming MJPEG."""
@@ -219,6 +292,13 @@ class CameraService:
                                 ),
                                 "bad_posture": assessment.is_bad_posture,
                             }
+                        )
+
+                        # Snapshot aislado para evitar que el buffer mutable del loop afecte el procesamiento en background.
+                        self._process_and_dispatch_snapshot(
+                            frame=frame.copy(),
+                            bbox=det.box_xyxy,
+                            alert_level=alert_level
                         )
 
                 # Debug: Dibujar esqueleto
