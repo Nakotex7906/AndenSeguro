@@ -1,33 +1,38 @@
 """
 Servicio de cámara refactorizado — Andén Seguro.
 
-Responsabilidad única: coordinar la lectura del feed de video
-y orquestar el pipeline de IA (detector → pose → riesgo).
+Responsabilidad única: coordinar la lectura del feed de video,
+orquestar el pipeline de IA (detector → pose → riesgo) y despachar
+los incidentes críticos de manera asíncrona hacia servicios externos.
 """
 
 import logging
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor
+from typing import Generator, List, Union
 
 import cv2
 import numpy as np
+from sqlmodel import Session, select
 
 from app.core.config import get_settings
 from app.core.websocket_manager import ws_manager
+from app.db.session import engine
+from app.models.user import User
+from app.services.incident_service import create_incident
+from app.services.notification_service import notification_service
+from app.services.vision_service import vision_service
 from app.vision.detector import PersonDetector
 from app.vision.pose import PoseAnalyzer
 from app.vision.risk import RiskEvaluator, RiskLevel
-from concurrent.futures import ThreadPoolExecutor
-from sqlmodel import Session
-from app.db.session import engine
-from app.services.vision_service import vision_service
-from app.services.incident_service import create_incident
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 class CameraService:
-    """Coordina la captura de video y la ejecución del pipeline de IA."""
+    """Coordina la captura de video en tiempo real y la ejecución del pipeline de IA."""
 
     def __init__(
         self,
@@ -39,6 +44,9 @@ class CameraService:
         yellow_points: list = None,
         red_points: list = None,
     ):
+        """
+        Inicializa las dependencias de hardware virtual, modelos y estados de la cámara.
+        """
         self.camera_id = camera_id
         self.stream_url = stream_url
         self.detector = detector
@@ -59,10 +67,17 @@ class CameraService:
         # Cooldown de alertas para evitar duplicados (track_id -> last_alert_time)
         self._alert_cooldown: dict[int, float] = {}
         self._alert_cooldown_seconds = 10.0
+        
+        # Executor de hilos secundario para I/O intensivo sin bloquear el streaming
         self._background_executor = ThreadPoolExecutor(max_workers=3)
 
-    def _resolve_video_source(self):
-        """Determina la fuente de video."""
+    def _resolve_video_source(self) -> Union[str, int]:
+        """
+        Determina la fuente de video analizando si corresponde a una URL externa o local.
+
+        Returns:
+            Union[str, int]: URL del stream, endpoint de video o índice de hardware.
+        """
         source = self.stream_url
 
         if source:
@@ -82,8 +97,16 @@ class CameraService:
         logger.warning(f"Cámara #{self.camera_id} - No hay stream configurado. Usando cámara local 0")
         return 0
 
-    def _should_emit_alert(self, track_id: int | None) -> bool:
-        """Verifica si se debe emitir una alerta (cooldown anti-spam)."""
+    def _should_emit_alert(self, track_id: Union[int, None]) -> bool:
+        """
+        Verifica si se debe emitir una alerta basándose en una política de cooldown anti-spam.
+
+        Args:
+            track_id (int, optional): Identificador del sujeto rastreado.
+
+        Returns:
+            bool: True si la alerta puede ser despachada, False si está en periodo de gracia.
+        """
         if track_id is None:
             return True
         current = time.time()
@@ -93,10 +116,18 @@ class CameraService:
             return True
         return False
     
-    def _extract_focused_roi(self, frame: np.ndarray, bbox: list[int], padding_percentage: float = 0.15) -> np.ndarray:
+    def _extract_focused_roi(self, frame: np.ndarray, bbox: List[int], padding_percentage: float = 0.15) -> np.ndarray:
         """
         Extrae la Región de Interés (ROI) del frame basándose en la bounding box,
         aplicando un margen de contexto para que la IA entienda el entorno.
+
+        Args:
+            frame (np.ndarray): Matriz completa de la imagen en memoria.
+            bbox (List[int]): Coordenadas límites de la detección [x1, y1, x2, y2].
+            padding_percentage (float): Porcentaje de margen extra de contexto.
+
+        Returns:
+            np.ndarray: Submatriz recortada de la zona crítica.
         """
         h, w = frame.shape[:2]
         x1, y1, x2, y2 = map(int, bbox)
@@ -114,76 +145,139 @@ class CameraService:
 
         return frame[y1_padded:y2_padded, x1_padded:x2_padded]
 
-    def _async_vision_and_persistence_worker(self, frame_roi: np.ndarray, alert_level: str):
+    def _save_snapshot_to_disk(self, frame_roi: np.ndarray, track_id: int) -> str:
         """
-        Trabajador ejecutado en segundo plano por el ThreadPool. 
-        Consume la API de Groq, persiste el incidente en la BD y notifica al móvil.
-        """
-        logger.info(f"Iniciando análisis de visión con Groq en background para alerta: {alert_level}")
-        
-        # 1. Llamar al servicio de IA (Fase 2)
-        ia_description = vision_service.analyze_incident_zone(frame_roi, alert_level)
-        logger.info(f"Descripción obtenida de la IA: '{ia_description}'")
+        Escribe de forma física el recorte del incidente en la carpeta estática del servidor.
 
-        # 2. Persistencia en Base de Datos usando la sesión on-demand
+        Args:
+            frame_roi (np.ndarray): Matriz de píxeles recortada.
+            track_id (int): Identificador de la persona en riesgo.
+
+        Returns:
+            str: El nombre único del archivo guardado en el disco (.jpg).
+
+        Raises:
+            IOError: Si ocurre un fallo en el sistema de archivos al escribir la imagen.
+        """
+        timestamp = int(time.time())
+        filename = f"incident_cam_{self.camera_id}_track_{track_id}_{timestamp}.jpg"
+        
+        # Calcular de forma robusta la ruta absoluta hacia app/static/snapshots
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        target_dir = os.path.join(project_root, "static", "snapshots")
+        
+        os.makedirs(target_dir, exist_ok=True)
+        full_path = os.path.join(target_dir, filename)
+        
+        success = cv2.imwrite(full_path, frame_roi)
+        if not success:
+            raise IOError(f"No se pudo escribir físicamente el snapshot en: {full_path}")
+            
+        logger.info(f"[IO] Captura guardada con éxito en el sistema local: {filename}")
+        return filename
+
+    def _async_vision_and_persistence_worker(self, frame_roi: np.ndarray, track_id: int, alert_level: str, zone: str):
+        """
+        Trabajador en segundo plano encargado de la persistencia de imágenes, 
+        llamadas a Groq y el envío de la push notification enriquecida.
+        """
+        logger.info(f"Procesando incidente en background para track {track_id}")
+        
         try:
+            # Guardar la imagen en el almacenamiento estático local (SANEADO)
+            filename = self._save_snapshot_to_disk(frame_roi, track_id)
+            
+            # Construimos la URL pública para que el móvil pueda descargar el archivo
+            base_url = getattr(settings, "API_BASE_URL", "http://localhost:8000")
+            public_image_url = f"{base_url}/static/snapshots/{filename}"
+
+            # Obtener la descripción desde Groq (Llama 4 Scout)
+            ia_description = vision_service.analyze_incident_zone(frame_roi, alert_level)
+
+            # Guardar el registro en la base de datos relacional
             with Session(engine) as session:
                 incident = create_incident(
                     db=session,
                     camera_id=self.camera_id,
                     alert_level=alert_level,
-                    description=ia_description
+                    description=ia_description,
+                    image_url=public_image_url  
                 )
-                logger.info(f"Incidente #{incident.id} guardado con éxito.")
                 
-                # TODO: Reemplazar este mock string por el token real que se guarde en 
-                # la base de datos del guardia cuando inicie sesión en la app.
-                MOCK_GUARD_TOKEN = "ExponentPushToken[AquíVaElTokenRealDelCelular]"
+                # Consultar todos los usuarios con un token push activo y despachar la alerta
+                statement = select(User).where(User.expo_push_token != None)
+                active_guards = session.exec(statement).all()
+
+                if not active_guards:
+                    logger.warning(
+                        "No se encontraron guardias con tokens push registrados en la DB. Alerta no enviada por Push."
+                    )
+                else:
+                    push_title = f" ALERTA CRÍTICA - Cámara #{self.camera_id}"
+                    metadata_app = {
+                        "incident_id": incident.id,
+                        "camera_id": self.camera_id,
+                        "level": alert_level,
+                        "image_url": public_image_url
+                    }
+
+                    for guard in active_guards:
+                        logger.info(f"Despachando push a guardia: {guard.username}")
+                        notification_service.send_push_notification(
+                            expo_token=guard.expo_push_token,
+                            title=push_title,
+                            body=ia_description,
+                            extra_data=metadata_app,
+                        )
                 
-                # Título de la alerta operacional
-                push_title = f"ALERTA CRÍTICA - Cámara #{self.camera_id}"
-                
-                # Datos extra (Contrato de datos) para que la App Móvil renderice la vista detallada
-                metadata_app = {
+                # Emitir el broadcast por WebSocket para la App Móvil en Expo Go
+                ws_manager.broadcast_sync({
+                    "type": "incident_enriched",
                     "incident_id": incident.id,
                     "camera_id": self.camera_id,
                     "level": alert_level,
-                    # De momento mandamos la descripción. 
-                    # El frame/recorte se mandará por URL estática o descarga diferida en el siguiente paso.
-                }
-
-                # Invocar al servicio push de manera asíncrona dentro del hilo secundario
-                from app.services.notification_service import notification_service
-                notification_service.send_push_notification(
-                    expo_token=MOCK_GUARD_TOKEN,
-                    title=push_title,
-                    body=ia_description,
-                    extra_data=metadata_app
-                )
+                    "description": ia_description,
+                    "image_url": public_image_url
+                })
+                logger.info("[WS] Alerta enriquecida distribuida a los clientes conectados.")
                 
         except Exception as e:
-            logger.error(f"Error al persistir o notificar el incidente enriquecido: {e}")
+            logger.error(f"Error crítico en el flujo de fondo del incidente: {e}")
 
-    def _process_and_dispatch_snapshot(self, frame: np.ndarray, bbox: list[int], alert_level: str):
+    def _process_and_dispatch_snapshot(
+        self, 
+        frame: np.ndarray, 
+        bbox: list[int], 
+        track_id: int, 
+        alert_level: str, 
+        zone: str
+    ):
         """
-        Extrae el snapshot y delega el análisis pesado al pool de hilos de fondo.
-        Garantiza que el loop principal 'generate_frames' recupere el control de inmediato.
+        Extrae la Región de Interés (ROI) de forma síncrona y delega el procesamiento
+        pesado de IA (Groq) e I/O al pool de hilos en segundo plano.
         """
         try:
-            # Recortar la imagen en el hilo de procesamiento de video
             frame_roi = self._extract_focused_roi(frame, bbox)
             
-            # Enviar la tarea pesada al ejecutor de hilos sin bloquear el stream
+            # Enviar la tarea pesada al executor de hilos pasándole todos los metadatos requeridos
             self._background_executor.submit(
                 self._async_vision_and_persistence_worker,
                 frame_roi,
-                alert_level
+                track_id,
+                alert_level,
+                zone
             )
-        except Exception as e:
-            logger.error(f"Fallo al empaquetar y despachar el snapshot: {e}")
+        except Exception as error:
+            logger.error(f"Fallo crítico al empaquetar o despachar el snapshot para el track {track_id}: {error}")
 
-    def generate_frames(self):
-        """Generador de frames procesados para streaming MJPEG."""
+    def generate_frames(self) -> Generator[bytes, None, None]:
+        """
+        Generador continuo de frames procesados para streaming MJPEG.
+
+        Yields:
+            bytes: Bloques binarios de la imagen formateados para protocolo multipart HTTP.
+        """
         try:
             source = self._resolve_video_source()
             cap = cv2.VideoCapture(source)
@@ -199,7 +293,6 @@ class CameraService:
             try:
                 success, frame = cap.read()
                 if not success:
-                    # Si el stream es un archivo local y termina, reiniciarlo para hacer un loop infinito
                     if source and isinstance(source, str) and source.endswith(".mp4"):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         continue
@@ -224,7 +317,7 @@ class CameraService:
                 else []
             )
 
-            # Dibujar zonas de riesgo de forma independiente
+            # Dibujar capas de las zonas de riesgo
             overlay = frame.copy()
             if abs_yellow:
                 pts_y = np.array(abs_yellow, np.int32)
@@ -240,13 +333,9 @@ class CameraService:
             if abs_red:
                 cv2.polylines(frame, [np.array(abs_red, np.int32)], True, (0, 0, 255), 2)
 
-            # Pipeline de IA: Detección → Pose → Riesgo
-            yellow_polygon = (
-                np.array(abs_yellow, np.int32) if abs_yellow else None
-            )
-            red_polygon = (
-                np.array(abs_red, np.int32) if abs_red else None
-            )
+            # Polígonos para la evaluación analítica
+            yellow_polygon = np.array(abs_yellow, np.int32) if abs_yellow else None
+            red_polygon = np.array(abs_red, np.int32) if abs_red else None
 
             detections = self.detector.detect(frame)
 
@@ -259,10 +348,8 @@ class CameraService:
                 x1, y1, x2, y2 = det.box_xyxy
                 feet = ((x1 + x2) // 2, y2)
 
-                # Análisis postural
                 pose_result = self.pose_analyzer.analyze(det.keypoints_xy)
 
-                # Evaluación de riesgo
                 assessment = self.risk_evaluator.evaluate(
                     track_id=det.track_id,
                     feet=feet,
@@ -271,37 +358,25 @@ class CameraService:
                     red_polygon=red_polygon,
                 )
 
-                # Determinar color y etiqueta para visualización
                 color_map = {
                     RiskLevel.SAFE: ((0, 255, 0), "SEGURO"),
                     RiskLevel.CAUTION: ((0, 215, 255), "PRECAUCION"),
                     RiskLevel.HIGH_RISK: ((0, 0, 255), "ALTO RIESGO"),
                     RiskLevel.DANGER: ((0, 0, 255), "PELIGRO"),
                 }
-                color, label = color_map.get(
-                    assessment.level, ((0, 255, 0), "SEGURO")
-                )
+                color, label = color_map.get(assessment.level, ((0, 255, 0), "SEGURO"))
 
-                # Contabilizar
                 if assessment.level == RiskLevel.DANGER:
                     personas_peligro += 1
-                elif assessment.level in (
-                    RiskLevel.CAUTION,
-                    RiskLevel.HIGH_RISK,
-                ):
+                elif assessment.level in (RiskLevel.CAUTION, RiskLevel.HIGH_RISK):
                     personas_riesgo += 1
 
-                # Emitir alerta WebSocket si es peligro
-                if assessment.level in (
-                    RiskLevel.DANGER,
-                    RiskLevel.HIGH_RISK,
-                ):
+                # Disparador lógico de alertas críticas
+                if assessment.level in (RiskLevel.DANGER, RiskLevel.HIGH_RISK):
                     if self._should_emit_alert(det.track_id):
-                        alert_level = (
-                            "red"
-                            if assessment.level == RiskLevel.DANGER
-                            else "orange"
-                        )
+                        alert_level = "red" if assessment.level == RiskLevel.DANGER else "orange"
+                        
+                        # Transmitir alerta básica inmediata
                         ws_manager.broadcast_sync(
                             {
                                 "type": "alert",
@@ -309,60 +384,36 @@ class CameraService:
                                 "level": alert_level,
                                 "track_id": det.track_id,
                                 "zone": assessment.zone.value,
-                                "time_in_zone": round(
-                                    assessment.time_in_zone, 1
-                                ),
+                                "time_in_zone": round(assessment.time_in_zone, 1),
                                 "bad_posture": assessment.is_bad_posture,
                             }
                         )
 
-                        # Snapshot aislado para evitar que el buffer mutable del loop afecte el procesamiento en background.
+                        # SANEADO: Se inyectan de forma explícita los parámetros track_id y zone requeridos por la firma
                         self._process_and_dispatch_snapshot(
                             frame=frame.copy(),
                             bbox=det.box_xyxy,
-                            alert_level=alert_level
+                            track_id=det.track_id,
+                            alert_level=alert_level,
+                            zone=assessment.zone.value
                         )
 
-                # Debug: Dibujar esqueleto
+                # Dibujado complementario de esqueletos (Modo Debug)
                 if debug_pose and det.keypoints_xy is not None:
                     for kp in det.keypoints_xy:
                         px, py = int(kp[0]), int(kp[1])
                         if px > 0 and py > 0:
-                            cv2.circle(
-                                frame, (px, py), 3, (255, 0, 255), -1
-                            )
+                            cv2.circle(frame, (px, py), 3, (255, 0, 255), -1)
 
                     if len(det.keypoints_xy) > 12:
                         head_x = int(det.keypoints_xy[0][0])
                         head_y_int = int(det.keypoints_xy[0][1])
-                        hip_x = int(
-                            (
-                                det.keypoints_xy[11][0]
-                                + det.keypoints_xy[12][0]
-                            )
-                            / 2
-                        )
-                        hip_y_int = int(
-                            (
-                                det.keypoints_xy[11][1]
-                                + det.keypoints_xy[12][1]
-                            )
-                            / 2
-                        )
+                        hip_x = int((det.keypoints_xy[11][0] + det.keypoints_xy[12][0]) / 2)
+                        hip_y_int = int((det.keypoints_xy[11][1] + det.keypoints_xy[12][1]) / 2)
 
                         if head_x > 0 and head_y_int > 0 and hip_y_int > 0:
-                            color_eje = (
-                                (0, 165, 255)
-                                if pose_result.is_bad_posture
-                                else (0, 255, 255)
-                            )
-                            cv2.line(
-                                frame,
-                                (head_x, head_y_int),
-                                (hip_x, hip_y_int),
-                                color_eje,
-                                2,
-                            )
+                            color_eje = (0, 165, 255) if pose_result.is_bad_posture else (0, 255, 255)
+                            cv2.line(frame, (head_x, head_y_int), (hip_x, hip_y_int), color_eje, 2)
                             if pose_result.is_bad_posture:
                                 cv2.putText(
                                     frame,
@@ -374,11 +425,9 @@ class CameraService:
                                     1,
                                 )
 
-                # Dibujar bounding box e ID
+                # Dibujar bounding box e identificador operacional
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                id_label = (
-                    det.track_id if det.track_id is not None else "N/A"
-                )
+                id_label = det.track_id if det.track_id is not None else "N/A"
                 cv2.putText(
                     frame,
                     f"ID:{id_label} {label}",
@@ -389,22 +438,20 @@ class CameraService:
                     2,
                 )
 
-            # Actualizar estadísticas
+            # Sincronizar conteos globales en las propiedades del servicio
             self.current_stats["total_persons"] = total_personas
             self.current_stats["risk_persons"] = personas_riesgo
             self.current_stats["danger_persons"] = personas_peligro
 
-            # Codificar frame para streaming MJPEG
+            # Codificar matriz final a JPEG para empaquetado MJPEG
             ret, buffer = cv2.imencode(".jpg", frame)
             if not ret:
                 continue
 
             yield (
                 b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n"
-                + buffer.tobytes()
-                + b"\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
             )
 
         cap.release()
-        logger.info("Captura de video liberada.")
+        logger.info("Captura de video liberada de forma correcta.")

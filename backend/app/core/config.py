@@ -5,7 +5,6 @@ Todas las variables de entorno se validan y tipan aquí mediante Pydantic Settin
 """
 
 from functools import lru_cache
-
 from pydantic_settings import BaseSettings
 
 
@@ -24,6 +23,12 @@ class Settings(BaseSettings):
     YOLO_MODEL: str = "yolov8n-pose.pt"
     YOLO_IMGSZ: int = 1280
     YOLO_CONF_THRESHOLD: float = 0.25
+
+    GROQ_API_KEY: str 
+    
+    # URL base del servidor utilizada para construir los enlaces de los snapshots 
+    # que se envían por red local hacia la aplicación móvil.
+    API_BASE_URL: str = "http://localhost:8000"
 
     # --- Cámara Ezviz ---
     APP_KEY: str = ""
@@ -49,5 +54,8 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Singleton cacheado en memoria para la configuración."""
+    """
+    Singleton cacheado en memoria para la configuración.
+    Garantiza que el archivo .env se lea una única vez reduciendo I/O redundante.
+    """
     return Settings()

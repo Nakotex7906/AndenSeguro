@@ -6,10 +6,12 @@ inicialización de la base de datos y registro de todas las rutas.
 """
 
 import logging
+import os  
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles  
 
 from app.core.config import get_settings
 from app.core.exceptions import AndenSeguroException
@@ -39,6 +41,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIRECTORY = os.path.join(CURRENT_DIRECTORY, "static")
+SNAPSHOTS_DIRECTORY = os.path.join(STATIC_DIRECTORY, "snapshots")
+
+os.makedirs(SNAPSHOTS_DIRECTORY, exist_ok=True)
+
+# Los archivos guardados en la carpeta física serán accesibles mediante HTTP 
+# bajo la ruta base: /static/snapshots/nombre_archivo.jpg
+app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
+logger.info(f"Directorio estático montado exitosamente en: {STATIC_DIRECTORY}")
 
 
 # --- Manejo Global de Excepciones ---
@@ -102,6 +115,7 @@ def _seed_superuser():
             )
             db.add(admin)
             db.commit()
+            db.refresh(admin)
             logger.info(
                 "Superusuario 'admin' creado con password por defecto. "
                 "¡Cambiar en producción!"

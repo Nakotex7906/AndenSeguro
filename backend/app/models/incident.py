@@ -19,9 +19,10 @@ class Incident(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     camera_id: int = Field(foreign_key="cameras.id", index=True)
     alert_level: str = Field(
-        description="Nivel de alerta: orange | red",
+        description="Nivel de alerta: yellow | red",
     )
     description: str = Field(default="")
+    image_url: Optional[str] = Field(default=None)
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         index=True,

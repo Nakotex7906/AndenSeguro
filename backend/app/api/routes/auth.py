@@ -10,6 +10,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.api.deps import get_current_user, require_role
@@ -30,6 +31,15 @@ from app.schemas.auth import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class PushTokenUpdate(BaseModel):
+    """Contrato de datos para la actualización del token del dispositivo."""
+
+    push_token: str = Field(
+        ...,
+        description="Token único generado por Expo (ExponentPushToken[...])",
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -73,6 +83,35 @@ def get_me(
 ):
     """Retorna los datos del usuario autenticado."""
     return current_user
+
+
+@router.post("/register-push-token", status_code=status.HTTP_200_OK)
+def register_guard_push_token(
+    payload: PushTokenUpdate,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Registra o actualiza el token de notificaciones push del dispositivo móvil
+    del guardia en su perfil de la base de datos.
+    """
+    current_user = db.exec(select(User).where(User.username == "admin")).first()
+
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado en el sistema.",
+        )
+
+    if current_user.expo_push_token != payload.push_token:
+        current_user.expo_push_token = payload.push_token
+        db.add(current_user)
+        db.commit()
+        db.refresh(current_user)
+        logger.info(
+            f"Token push actualizado exitosamente para el usuario: {current_user.username}"
+        )
+
+    return {"status": "success", "message": "Token registrado correctamente."}
 
 
 @router.post(
