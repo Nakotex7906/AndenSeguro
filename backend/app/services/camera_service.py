@@ -117,15 +117,15 @@ class CameraService:
     def _async_vision_and_persistence_worker(self, frame_roi: np.ndarray, alert_level: str):
         """
         Trabajador ejecutado en segundo plano por el ThreadPool. 
-        Consume la API de Groq y persiste el incidente enriquecido en la BD.
+        Consume la API de Groq, persiste el incidente en la BD y notifica al móvil.
         """
         logger.info(f"Iniciando análisis de visión con Groq en background para alerta: {alert_level}")
         
-        # Llamar al servicio de IA 
+        # 1. Llamar al servicio de IA (Fase 2)
         ia_description = vision_service.analyze_incident_zone(frame_roi, alert_level)
         logger.info(f"Descripción obtenida de la IA: '{ia_description}'")
 
-        # Persistencia en Base de Datos usando la sesión on-demand
+        # 2. Persistencia en Base de Datos usando la sesión on-demand
         try:
             with Session(engine) as session:
                 incident = create_incident(
@@ -134,13 +134,35 @@ class CameraService:
                     alert_level=alert_level,
                     description=ia_description
                 )
-                logger.info(f"Incidente #{incident.id} guardado con éxito y enriquecido con IA.")
+                logger.info(f"Incidente #{incident.id} guardado con éxito.")
                 
-                # TODO Disparar la Push Notification a la App Móvil aquí
-                # enviando incident.id, ia_description y la referencia visual.
+                # TODO: Reemplazar este mock string por el token real que se guarde en 
+                # la base de datos del guardia cuando inicie sesión en la app.
+                MOCK_GUARD_TOKEN = "ExponentPushToken[AquíVaElTokenRealDelCelular]"
+                
+                # Título de la alerta operacional
+                push_title = f"ALERTA CRÍTICA - Cámara #{self.camera_id}"
+                
+                # Datos extra (Contrato de datos) para que la App Móvil renderice la vista detallada
+                metadata_app = {
+                    "incident_id": incident.id,
+                    "camera_id": self.camera_id,
+                    "level": alert_level,
+                    # De momento mandamos la descripción. 
+                    # El frame/recorte se mandará por URL estática o descarga diferida en el siguiente paso.
+                }
+
+                # Invocar al servicio push de manera asíncrona dentro del hilo secundario
+                from app.services.notification_service import notification_service
+                notification_service.send_push_notification(
+                    expo_token=MOCK_GUARD_TOKEN,
+                    title=push_title,
+                    body=ia_description,
+                    extra_data=metadata_app
+                )
                 
         except Exception as e:
-            logger.error(f"Error al persistir el incidente enriquecido en segundo plano: {e}")
+            logger.error(f"Error al persistir o notificar el incidente enriquecido: {e}")
 
     def _process_and_dispatch_snapshot(self, frame: np.ndarray, bbox: list[int], alert_level: str):
         """
