@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Anden Seguro",
-    "slug": "AndenSeguro",
+    "slug": "andenseguro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
-    "scheme": "AndenSeguro",
+    "scheme": "andenseguro",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
@@ -17,7 +17,8 @@
         "backgroundColor": "#0d0e10"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": true
+      "predictiveBackGestureEnabled": true,
+      "package": "com.nachoessus.andenseguro"
     },
     "web": {
       "output": "static",
@@ -32,7 +33,9 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#0d0e10",
-          "dark": { "backgroundColor": "#0d0e10" }
+          "dark": {
+            "backgroundColor": "#0d0e10"
+          }
         }
       ],
       [
@@ -41,13 +44,20 @@
           "position": "absolute",
           "visibility": "hidden",
           "behavior": "inset-swipe",
-          "backgroundColor": "#00000000",
-          "borderColor": "#00000000"
+          "backgroundColor": "#0d0e10",
+          "borderColor": "#0d0e10"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dbca63a5-9ed1-4883-8688-df3c1dfba377"
+      }
+    },
+    "owner": "nachoessus"
   }
 }
