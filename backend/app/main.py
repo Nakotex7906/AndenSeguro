@@ -90,6 +90,7 @@ def on_startup():
     logger.info("Iniciando Andén Seguro API v2.0.0...")
     create_db_and_tables()
     _seed_superuser()
+    _seed_operational_agent()
     _seed_demo_stations()
     logger.info("Base de datos inicializada correctamente.")
 
@@ -121,6 +122,36 @@ def _seed_superuser():
                 "¡Cambiar en producción!"
             )
 
+def _seed_operational_agent():
+    """
+    Crea el agente operativo de pruebas si no existe en la base de datos.
+    """
+    from datetime import datetime, timezone
+    from sqlmodel import Session, select
+
+    from app.core.security import get_password_hash
+    from app.db.session import engine
+    from app.models.user import User
+
+    with Session(engine) as db:
+        # Verificamos si el agente ya existe para no duplicar registros
+        existing_agent = db.exec(
+            select(User).where(User.username == "agente.essus")
+        ).first()
+
+        if not existing_agent:
+            agent = User(
+                username="agente.essus",
+                full_name="Agente R. Essus",
+                hashed_password=get_password_hash("1234"),  # Encriptación reglamentaria Bcrypt
+                role="agent",
+                is_active=True,  
+                created_at=datetime.now(timezone.utc),  
+            )
+            db.add(agent)
+            db.commit()
+            db.refresh(agent)
+            logger.info("Usuario semilla 'agente.essus' creado exitosamente para el entorno móvil.")
 
 def _seed_demo_stations():
     """Crea estaciones y cámaras de demostración si la tabla está vacía."""
