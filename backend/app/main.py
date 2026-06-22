@@ -154,36 +154,49 @@ def _seed_operational_agent():
             logger.info("Usuario semilla 'agente.essus' creado exitosamente para el entorno móvil.")
 
 def _seed_demo_stations():
-    """Crea estaciones y cámaras de demostración si la tabla está vacía."""
+    """
+    Crea estaciones y cámaras de demostración vinculando de forma exacta los
+    archivos de video locales (.mp4) ubicados en la raíz del directorio backend.
+    """
     from sqlmodel import Session, select
-
     from app.db.session import engine
     from app.models.station import Camera, Station
 
     with Session(engine) as db:
-        existing = db.exec(select(Station)).first()
-        if not existing:
-            for i in range(1, 4):
-                station = Station(
-                    name=f"Estación {i}",
-                    code=f"EST{i}",
-                    line=f"Línea {((i - 1) % 3) + 1}",
+        existing_fixtures = db.exec(select(Station)).first()
+        if not existing_fixtures:
+            
+            video_fixtures_mapping = {
+                1: "simulacion_calle.mp4",
+                2: "simulacion_calle_2.mp4",
+                3: "simulacion_calle_3.mp4"
+            }
+
+            for incremental_index in range(1, 4):
+                new_station_fixture = Station(
+                    name=f"Estación {incremental_index}",
+                    code=f"EST{incremental_index}",
+                    line=f"Línea {((incremental_index - 1) % 3) + 1}",
                 )
-                db.add(station)
+                db.add(new_station_fixture)
                 db.commit()
-                db.refresh(station)
+                db.refresh(new_station_fixture)
 
-                camera = Camera(
-                    station_id=station.id,
-                    label=f"Cámara Andén {i}",
-                    serial="",
+                resolved_stream_source = video_fixtures_mapping.get(
+                    incremental_index, 
+                    "simulacion_calle.mp4"
                 )
-                db.add(camera)
-            db.commit()
-            logger.info(
-                "Estaciones y cámaras de demostración creadas (Estación 1-3)"
-            )
 
+                new_camera_fixture = Camera(
+                    station_id=new_station_fixture.id,
+                    label=f"Cámara Andén {incremental_index}",
+                    serial=f"SN-000{incremental_index}X",
+                    stream_url=resolved_stream_source  # Columna física alineada con el modelo
+                )
+                db.add(new_camera_fixture)
+                
+            db.commit()
+            logger.info("Estaciones y cámaras de demostración vinculadas a los videos MP4 reales de la raíz.")
 
 # --- Registro de Rutas ---
 from app.api.routes import auth, dashboard, incidents, stream, alerts  # noqa: E402

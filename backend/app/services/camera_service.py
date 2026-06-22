@@ -274,35 +274,55 @@ class CameraService:
     def generate_frames(self) -> Generator[bytes, None, None]:
         """
         Generador continuo de frames procesados para streaming MJPEG.
+        
+        Aplica un límite de fallos consecutivos y validación de apertura de hardware 
+        para evitar bucles infinitos que bloqueen los hilos de apagado del servidor.
 
         Yields:
-            bytes: Bloques binarios de la imagen formateados para protocolo multipart HTTP.
+            bytes: Bloques binarios de la imagen formateados para el protocolo multipart HTTP.
         """
-        try:
-            source = self._resolve_video_source()
-            cap = cv2.VideoCapture(source)
-            if source != 0 and "youtube" not in str(self.stream_url):
-                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        except Exception as e:
-            logger.error(f"Fallo al iniciar captura: {e}")
+        source = self._resolve_video_source()
+        cap = cv2.VideoCapture(source)
+
+        if not cap.isOpened():
+            logger.error(
+                f"Cámara #{self.camera_id} - No se pudo abrir la fuente de video física o archivo: {source}"
+            )
             return
 
+        if source != 0 and "youtube" not in str(self.stream_url):
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
         debug_pose = settings.DEBUG_POSE
+        consecutive_failures = 0
+        max_consecutive_failures = 10  # Límite preventivo anti-bloqueo
 
         while True:
+            if consecutive_failures >= max_consecutive_failures:
+                logger.error(
+                    f"Cámara #{self.camera_id} - Se superó el límite de fallos de lectura. Cerrando el flujo por seguridad."
+                )
+                break
+
             try:
                 success, frame = cap.read()
                 if not success:
+                    # Si es un video local de pruebas, reiniciamos el loop del mp4
                     if source and isinstance(source, str) and source.endswith(".mp4"):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        consecutive_failures += 1
                         continue
-                    logger.warning("Error al leer frame. Reintentando en 1s...")
+                    
+                    logger.warning(f"Cámara #{self.camera_id} - Error al leer frame. Reintentando...")
+                    consecutive_failures += 1
                     time.sleep(1)
                     continue
             except Exception as e:
-                logger.error(f"Error leyendo frame del video: {e}")
+                logger.error(f"Error crítico leyendo frame en el core de OpenCV: {e}")
                 break
 
+            # Reiniciamos el contador ante una lectura exitosa
+            consecutive_failures = 0
             h, w = frame.shape[:2]
 
             # Convertir porcentajes a píxeles absolutos
@@ -376,7 +396,6 @@ class CameraService:
                     if self._should_emit_alert(det.track_id):
                         alert_level = "red" if assessment.level == RiskLevel.DANGER else "orange"
                         
-                        # Transmitir alerta básica inmediata
                         ws_manager.broadcast_sync(
                             {
                                 "type": "alert",
@@ -389,7 +408,6 @@ class CameraService:
                             }
                         )
 
-                        # SANEADO: Se inyectan de forma explícita los parámetros track_id y zone requeridos por la firma
                         self._process_and_dispatch_snapshot(
                             frame=frame.copy(),
                             bbox=det.box_xyxy,
@@ -425,7 +443,6 @@ class CameraService:
                                     1,
                                 )
 
-                # Dibujar bounding box e identificador operacional
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 id_label = det.track_id if det.track_id is not None else "N/A"
                 cv2.putText(
@@ -438,12 +455,10 @@ class CameraService:
                     2,
                 )
 
-            # Sincronizar conteos globales en las propiedades del servicio
             self.current_stats["total_persons"] = total_personas
             self.current_stats["risk_persons"] = personas_riesgo
             self.current_stats["danger_persons"] = personas_peligro
 
-            # Codificar matriz final a JPEG para empaquetado MJPEG
             ret, buffer = cv2.imencode(".jpg", frame)
             if not ret:
                 continue
@@ -454,4 +469,4 @@ class CameraService:
             )
 
         cap.release()
-        logger.info("Captura de video liberada de forma correcta.")
+        logger.info(f"Cámara #{self.camera_id} - Captura de video liberada de forma correcta.")
