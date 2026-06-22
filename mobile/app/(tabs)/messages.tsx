@@ -36,15 +36,45 @@ const RISK_COLORS: Record<string, string> = {
 };
 
 /**
- * Calcula de forma semántica el tiempo transcurrido desde la detección del incidente.
- * * @param isoString Representación de fecha en formato ISO.
- * @returns Cadena con formato corto simplificado (ej: 4s, 12min, 2h).
+ * Calcula de forma semántica y legible el tiempo transcurrido desde la detección de una alerta.
+ * Convierte la diferencia temporal en texto formal en español resguardando singular y plural.
+ * * @param isoString Representación de la fecha y hora del incidente en formato ISO.
+ * @returns Cadena formateada descriptiva (ej: "1 segundo", "45 segundos", "12 minutos", "2 horas").
  */
 function timeAgo(isoString: string): string {
-  const diffInSeconds = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
-  if (diffInSeconds < 60) return `${diffInSeconds}s`;
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}min`;
-  return `${Math.floor(diffInSeconds / 3600)}h`;
+  const currentTimestamp = Date.now();
+  const incidentTimestamp = new Date(isoString).getTime();
+
+  const temporalDifferenceInSeconds = Math.max(0, Math.floor((currentTimestamp - incidentTimestamp) / 1000));
+
+  // Escala 1: Segundos (Menos de 60 segundos)
+  if (temporalDifferenceInSeconds < 60) {
+    return temporalDifferenceInSeconds === 1
+      ? '1 segundo'
+      : `${temporalDifferenceInSeconds} segundos`;
+  }
+
+  // Escala 2: Minutos (Menos de 60 minutos)
+  const totalMinutes = Math.floor(temporalDifferenceInSeconds / 60);
+  if (totalMinutes < 60) {
+    return totalMinutes === 1
+      ? '1 minuto'
+      : `${totalMinutes} minutos`;
+  }
+
+  // Escala 3: Horas (Menos de 24 horas)
+  const totalHours = Math.floor(totalMinutes / 60);
+  if (totalHours < 24) {
+    return totalHours === 1
+      ? '1 hora'
+      : `${totalHours} horas`;
+  }
+
+  // Escala 4: Días (Para alertas antiguas persistidas en el historial)
+  const totalDays = Math.floor(totalHours / 24);
+  return totalDays === 1
+    ? '1 día'
+    : `${totalDays} días`;
 }
 
 /**
@@ -223,10 +253,6 @@ export default function MensajesScreen() {
      * Controlador encargado de orquestar la llamada al servicio seguro e indexar
      * los resultados transformados en el estado local de React.
      */
-    /**
-     * Controlador encargado de orquestar la llamada al servicio seguro e indexar
-     * los resultados transformados en el estado local de React.
-     */
     const loadIncidentsHistory = async () => {
       try {
         const securityToken = user?.accessToken || null;
@@ -257,7 +283,7 @@ export default function MensajesScreen() {
     };
 
     loadIncidentsHistory();
-  }, [user?.accessToken]); // Solo se ejecuta si cambia el token JWT real de inicio de sesión
+  }, [user?.accessToken]);
 
   /**
    * Responsable exclusivo de la inicialización y registro del Token Push de Notificaciones
@@ -272,7 +298,7 @@ export default function MensajesScreen() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${user.accessToken}` 
+            'Authorization': `Bearer ${user.accessToken}`
           },
           body: JSON.stringify({ push_token: generatedToken }),
         });
@@ -281,7 +307,7 @@ export default function MensajesScreen() {
         console.error('[PUSH] Fallo al sincronizar token con el servidor:', error);
       }
     });
-  }, [user?.accessToken]); // Se ejecuta una sola vez cuando el usuario se loguea con éxito
+  }, [user?.accessToken]);
 
   /**
    * Responsable exclusivo de mantener el canal reactivo en tiempo real por WebSockets
