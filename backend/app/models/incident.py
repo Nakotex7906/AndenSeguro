@@ -22,7 +22,7 @@ class Incident(SQLModel, table=True):
         description="Nivel de alerta: yellow | red",
     )
     description: str = Field(default="")
-    image_url: Optional[str] = Field(default=None)
+    image_url: Optional[str] = Field(default=None, max_length=255)
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         index=True,

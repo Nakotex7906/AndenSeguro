@@ -20,6 +20,7 @@ class IncidentResponse(BaseModel):
     camera_id: int
     alert_level: str
     description: str
+    image_url: Optional[str] = None
     timestamp: datetime
     duration_seconds: Optional[float]
     status: str

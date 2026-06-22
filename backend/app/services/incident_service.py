@@ -15,6 +15,13 @@ from app.models.incident import Incident
 logger = logging.getLogger(__name__)
 
 
+def _normalize_optional_string(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
 def create_incident(
     db: Session,
     camera_id: int,
@@ -36,7 +43,7 @@ def create_incident(
         camera_id=camera_id,
         alert_level=alert_level,
         description=description,
-        image_url=image_url,
+        image_url=_normalize_optional_string(image_url),
         timestamp=datetime.now(timezone.utc),
         status="pending",
     )
