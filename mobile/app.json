@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Anden Seguro",
-    "slug": "andenseguro",
+    "slug": "AndenSeguro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
@@ -18,7 +18,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": true,
-      "package": "com.nachoessus.andenseguro"
+      "package": "com.nachoessus.andenseguro",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
