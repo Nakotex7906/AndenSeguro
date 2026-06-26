@@ -7,6 +7,7 @@ interpretar las imágenes de incidentes capturadas en los andenes.
 
 import base64
 import logging
+import re
 from typing import Optional
 import cv2
 import numpy as np
@@ -92,6 +93,32 @@ class VisionService:
         except Exception as error:
             logger.debug(f"No se pudo parsear headers de rate limit: {error}")
 
+    def _sanitize_ai_response(self, raw_text: str) -> str:
+        """
+        Remueve de forma estricta los bloques de razonamiento interno (<think>...</think>)
+        de la respuesta del modelo de lenguaje.
+
+        Utiliza expresiones regulares con soporte para truncamiento de tokens, asegurando
+        que si la etiqueta de cierre está ausente por falta de longitud en la respuesta,
+        se elimine todo el contenido remanente desde la apertura del tag.
+
+        Args:
+            raw_text (str): Texto bruto devuelto directamente por el LLM.
+
+        Returns:
+            str: Texto limpio filtrado, libre de trazas de pensamiento y espacios redundantes.
+        """
+        if not raw_text:
+            return ""
+        
+        sanitized_text = re.sub(
+            r"<think>.*?(?:\r?\n?</think>|$)", 
+            "", 
+            raw_text, 
+            flags=re.DOTALL
+        )
+        return sanitized_text.strip()
+
     def analyze_incident_zone(self, frame_roi: np.ndarray, alert_level: str) -> str:
         """
         Envía el recorte del incidente a Groq para extraer un perfil físico estructurado
@@ -150,15 +177,18 @@ class VisionService:
                     }
                 ],
                 temperature=0.2,
-                max_completion_tokens=150
+                max_completion_tokens=512
             )
 
             self._log_rate_limit_status(raw_response.headers)
 
             response = raw_response.parse()
-            ai_report = response.choices[0].message.content.strip()
-            logger.info("Reporte generado exitosamente por Groq.")
-            return ai_report
+            ia_description = response.choices[0].message.content
+            
+            clean_description = self._sanitize_ai_response(ia_description)
+            
+            logger.info("Reporte operativo procesado y sanitizado exitosamente por VisionService.")
+            return clean_description
 
         except Exception as error:
             logger.error(f"Fallo en la comunicación con la API de Groq Vision: {error}")

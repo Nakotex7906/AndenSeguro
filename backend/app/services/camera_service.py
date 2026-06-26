@@ -116,10 +116,10 @@ class CameraService:
             return True
         return False
     
-    def _extract_focused_roi(self, frame: np.ndarray, bbox: List[int], padding_percentage: float = 0.15) -> np.ndarray:
+    def _extract_focused_roi(self, frame: np.ndarray, bbox: List[int], padding_percentage: float = 0.45) -> np.ndarray:
         """
-        Extrae la Región de Interés (ROI) del frame basándose en la bounding box,
-        aplicando un margen de contexto para que la IA entienda el entorno.
+        Extrae la Región de Interés (ROI) aplicando un margen de contexto alrededor del 
+        bounding box detectado para optimizar el análisis cognitivo de la IA.
 
         Args:
             frame (np.ndarray): Matriz completa de la imagen en memoria.
@@ -162,7 +162,6 @@ class CameraService:
         timestamp = int(time.time())
         filename = f"incident_cam_{self.camera_id}_track_{track_id}_{timestamp}.jpg"
         
-        # Calcular de forma robusta la ruta absoluta hacia app/static/snapshots
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(current_dir)
         target_dir = os.path.join(project_root, "static", "snapshots")
@@ -179,23 +178,20 @@ class CameraService:
 
     def _async_vision_and_persistence_worker(self, frame_roi: np.ndarray, track_id: int, alert_level: str, zone: str):
         """
-        Trabajador en segundo plano encargado de la persistencia de imágenes, 
-        llamadas a Groq y el envío de la push notification enriquecida.
+        Trabador asíncrono en segundo plano encargado del almacenamiento persistente,
+        invocación del VisionService saneado y la distribución multiplataforma del incidente.
         """
         logger.info(f"Procesando incidente en background para track {track_id}")
         
         try:
-            # Guardar la imagen en el almacenamiento estático local (SANEADO)
             filename = self._save_snapshot_to_disk(frame_roi, track_id)
             
-            # Construimos la URL pública para que el móvil pueda descargar el archivo
             base_url = getattr(settings, "API_BASE_URL", "http://localhost:8000")
             public_image_url = f"{base_url}/static/snapshots/{filename}"
 
-            # Obtener la descripción desde Groq (Llama 4 Scout)
+            # Consumo de IA (Retorna texto estrictamente limpio de tags <think>)
             ia_description = vision_service.analyze_incident_zone(frame_roi, alert_level)
 
-            # Guardar el registro en la base de datos relacional
             with Session(engine) as session:
                 incident = create_incident(
                     db=session,
@@ -205,7 +201,6 @@ class CameraService:
                     image_url=public_image_url  
                 )
                 
-                # Consultar todos los usuarios con un token push activo y despachar la alerta
                 statement = select(User).where(User.expo_push_token != None)
                 active_guards = session.exec(statement).all()
 
@@ -214,7 +209,7 @@ class CameraService:
                         "No se encontraron guardias con tokens push registrados en la DB. Alerta no enviada por Push."
                     )
                 else:
-                    push_title = f" ALERTA CRÍTICA - Cámara #{self.camera_id}"
+                    push_title = f"ALERTA CRÍTICA - Cámara #{self.camera_id}"
                     metadata_app = {
                         "incident_id": incident.id,
                         "camera_id": self.camera_id,
@@ -231,7 +226,6 @@ class CameraService:
                             extra_data=metadata_app,
                         )
                 
-                # Emitir el broadcast por WebSocket para la App Móvil en Expo Go
                 ws_manager.broadcast_sync({
                     "type": "incident_enriched",
                     "incident_id": incident.id,
@@ -255,12 +249,11 @@ class CameraService:
     ):
         """
         Extrae la Región de Interés (ROI) de forma síncrona y delega el procesamiento
-        pesado de IA (Groq) e I/O al pool de hilos en segundo plano.
+        pesado de IA e I/O al pool de hilos en segundo plano.
         """
         try:
             frame_roi = self._extract_focused_roi(frame, bbox)
             
-            # Enviar la tarea pesada al executor de hilos pasándole todos los metadatos requeridos
             self._background_executor.submit(
                 self._async_vision_and_persistence_worker,
                 frame_roi,
@@ -273,21 +266,13 @@ class CameraService:
 
     def generate_frames(self) -> Generator[bytes, None, None]:
         """
-        Generador continuo de frames procesados para streaming MJPEG.
-        
-        Aplica un límite de fallos consecutivos y validación de apertura de hardware 
-        para evitar bucles infinitos que bloqueen los hilos de apagado del servidor.
-
-        Yields:
-            bytes: Bloques binarios de la imagen formateados para el protocolo multipart HTTP.
+        Generador continuo de frames procesados para streaming visual MJPEG de baja latencia.
         """
         source = self._resolve_video_source()
         cap = cv2.VideoCapture(source)
 
         if not cap.isOpened():
-            logger.error(
-                f"Cámara #{self.camera_id} - No se pudo abrir la fuente de video física o archivo: {source}"
-            )
+            logger.error(f"Cámara #{self.camera_id} - No se pudo abrir la fuente de video: {source}")
             return
 
         if source != 0 and "youtube" not in str(self.stream_url):
@@ -295,19 +280,16 @@ class CameraService:
 
         debug_pose = settings.DEBUG_POSE
         consecutive_failures = 0
-        max_consecutive_failures = 10  # Límite preventivo anti-bloqueo
+        max_consecutive_failures = 10  
 
         while True:
             if consecutive_failures >= max_consecutive_failures:
-                logger.error(
-                    f"Cámara #{self.camera_id} - Se superó el límite de fallos de lectura. Cerrando el flujo por seguridad."
-                )
+                logger.error(f"Cámara #{self.camera_id} - Cierre preventivo por fallos continuos de red.")
                 break
 
             try:
                 success, frame = cap.read()
                 if not success:
-                    # Si es un video local de pruebas, reiniciamos el loop del mp4
                     if source and isinstance(source, str) and source.endswith(".mp4"):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         consecutive_failures += 1
@@ -321,30 +303,17 @@ class CameraService:
                 logger.error(f"Error crítico leyendo frame en el core de OpenCV: {e}")
                 break
 
-            # Reiniciamos el contador ante una lectura exitosa
             consecutive_failures = 0
             h, w = frame.shape[:2]
 
-            # Convertir porcentajes a píxeles absolutos
-            abs_yellow = (
-                [(int(p[0] * w), int(p[1] * h)) for p in self.yellow_points]
-                if self.yellow_points
-                else []
-            )
-            abs_red = (
-                [(int(p[0] * w), int(p[1] * h)) for p in self.red_points]
-                if self.red_points
-                else []
-            )
+            abs_yellow = [(int(p[0] * w), int(p[1] * h)) for p in self.yellow_points] if self.yellow_points else []
+            abs_red = [(int(p[0] * w), int(p[1] * h)) for p in self.red_points] if self.red_points else []
 
-            # Dibujar capas de las zonas de riesgo
             overlay = frame.copy()
             if abs_yellow:
-                pts_y = np.array(abs_yellow, np.int32)
-                cv2.fillPoly(overlay, [pts_y], (0, 215, 255))
+                cv2.fillPoly(overlay, [np.array(abs_yellow, np.int32)], (0, 215, 255))
             if abs_red:
-                pts_r = np.array(abs_red, np.int32)
-                cv2.fillPoly(overlay, [pts_r], (0, 0, 255))
+                cv2.fillPoly(overlay, [np.array(abs_red, np.int32)], (0, 0, 255))
                 
             cv2.addWeighted(overlay, 0.2, frame, 0.8, 0, frame)
             
@@ -353,12 +322,10 @@ class CameraService:
             if abs_red:
                 cv2.polylines(frame, [np.array(abs_red, np.int32)], True, (0, 0, 255), 2)
 
-            # Polígonos para la evaluación analítica
             yellow_polygon = np.array(abs_yellow, np.int32) if abs_yellow else None
             red_polygon = np.array(abs_red, np.int32) if abs_red else None
 
             detections = self.detector.detect(frame)
-
             total_personas = 0
             personas_riesgo = 0
             personas_peligro = 0
@@ -369,7 +336,6 @@ class CameraService:
                 feet = ((x1 + x2) // 2, y2)
 
                 pose_result = self.pose_analyzer.analyze(det.keypoints_xy)
-
                 assessment = self.risk_evaluator.evaluate(
                     track_id=det.track_id,
                     feet=feet,
@@ -391,22 +357,19 @@ class CameraService:
                 elif assessment.level in (RiskLevel.CAUTION, RiskLevel.HIGH_RISK):
                     personas_riesgo += 1
 
-                # Disparador lógico de alertas críticas
                 if assessment.level in (RiskLevel.DANGER, RiskLevel.HIGH_RISK):
                     if self._should_emit_alert(det.track_id):
                         alert_level = "red" if assessment.level == RiskLevel.DANGER else "orange"
                         
-                        ws_manager.broadcast_sync(
-                            {
-                                "type": "alert",
-                                "camera_id": self.camera_id,
-                                "level": alert_level,
-                                "track_id": det.track_id,
-                                "zone": assessment.zone.value,
-                                "time_in_zone": round(assessment.time_in_zone, 1),
-                                "bad_posture": assessment.is_bad_posture,
-                            }
-                        )
+                        ws_manager.broadcast_sync({
+                            "type": "alert",
+                            "camera_id": self.camera_id,
+                            "level": alert_level,
+                            "track_id": det.track_id,
+                            "zone": assessment.zone.value,
+                            "time_in_zone": round(assessment.time_in_zone, 1),
+                            "bad_posture": assessment.is_bad_posture,
+                        })
 
                         self._process_and_dispatch_snapshot(
                             frame=frame.copy(),
@@ -416,7 +379,6 @@ class CameraService:
                             zone=assessment.zone.value
                         )
 
-                # Dibujado complementario de esqueletos (Modo Debug)
                 if debug_pose and det.keypoints_xy is not None:
                     for kp in det.keypoints_xy:
                         px, py = int(kp[0]), int(kp[1])
@@ -434,25 +396,15 @@ class CameraService:
                             cv2.line(frame, (head_x, head_y_int), (hip_x, hip_y_int), color_eje, 2)
                             if pose_result.is_bad_posture:
                                 cv2.putText(
-                                    frame,
-                                    "POSTURA CRITICA",
-                                    (head_x - 30, head_y_int - 20),
-                                    cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.4,
-                                    (0, 165, 255),
-                                    1,
+                                    frame, "POSTURA CRITICA", (head_x - 30, head_y_int - 20),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 165, 255), 1,
                                 )
 
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 id_label = det.track_id if det.track_id is not None else "N/A"
                 cv2.putText(
-                    frame,
-                    f"ID:{id_label} {label}",
-                    (x1, max(y1 - 10, 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    color,
-                    2,
+                    frame, f"ID:{id_label} {label}", (x1, max(y1 - 10, 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2,
                 )
 
             self.current_stats["total_persons"] = total_personas

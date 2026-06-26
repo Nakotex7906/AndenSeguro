@@ -202,7 +202,7 @@ function AlertCard({ alert, onComplete, onFalseAlarm }: AlertCardProps) {
                 <Ionicons name="image-outline" size={12} color={Palette.textDim} />
                 <Text style={styles.imageTitle}>CAPTURA EN TIEMPO REAL</Text>
               </View>
-              <Image source={{ uri: alert.imageUrl }} style={styles.screenshotImage} contentFit="cover" transition={300} />
+              <Image source={{ uri: alert.imageUrl }} style={styles.screenshotImage} contentFit="contain" transition={300} />
             </View>
           ) : (
             <View style={styles.feedPlaceholder}>
@@ -246,7 +246,7 @@ export default function MensajesScreen() {
   const { user } = useAuth();
 
   // IP Unificada del Backend de Andén Seguro para evitar duplicaciones
-  const BACKEND_BASE_IP = '192.168.1.88';
+  const BACKEND_BASE_IP = '192.168.1.89';
 
   useEffect(() => {
     /**
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
   imageContainer: { backgroundColor: Palette.bg2, borderWidth: 1, borderColor: Palette.border1, borderRadius: Radius.lg, padding: 10, gap: 6 },
   imageHeader: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   imageTitle: { fontSize: FontSize.xxs, fontWeight: FontWeight.bold, color: Palette.textDim, letterSpacing: 0.8 },
-  screenshotImage: { width: '100%', height: 160, borderRadius: Radius.md, backgroundColor: Palette.bg3 },
+  screenshotImage: { width: '100%', height: 250, borderRadius: Radius.md, backgroundColor: Palette.bg3 },
   feedPlaceholder: { height: 100, backgroundColor: Palette.bg2, borderWidth: 1, borderColor: Palette.border1, borderRadius: Radius.lg, alignItems: 'center', justifyContent: 'center', gap: 5 },
   feedText: { fontSize: FontSize.xxs, fontWeight: FontWeight.bold, color: Palette.textDim, letterSpacing: 1.5 },
   feedSub: { fontSize: FontSize.xxs, color: Palette.textDim },
