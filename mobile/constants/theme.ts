@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 export const Palette = {
   bg0:        '#0d0e10',
   bg1:        '#111214',

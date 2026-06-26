@@ -6,7 +6,6 @@ almacenando los polígonos de riesgo como JSON serializado.
 """
 
 from typing import Optional
-
 from sqlmodel import Field, SQLModel
 
 
@@ -23,7 +22,10 @@ class Station(SQLModel, table=True):
 
 
 class Camera(SQLModel, table=True):
-    """Tabla de cámaras de seguridad, vinculadas a una estación."""
+    """
+    Tabla de cámaras de seguridad, vinculadas a una estación.
+    Mapea la configuración analítica requerida por el pipeline de IA.
+    """
 
     __tablename__ = "cameras"
 
@@ -31,6 +33,14 @@ class Camera(SQLModel, table=True):
     station_id: int = Field(foreign_key="stations.id")
     label: str = Field(max_length=100)
     serial: str = Field(default="", max_length=50)
+    
+    # NUEVA COLUMNA: Almacena la ruta del video local o la URL RTSP del streaming físico
+    stream_url: str = Field(
+        default="", 
+        max_length=255, 
+        description="Ruta del archivo MP4 local o dirección del feed de video en vivo"
+    )
+    
     yellow_zone: str = Field(
         default="[]",
         description="Polígono amarillo serializado como JSON",
