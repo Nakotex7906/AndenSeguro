@@ -8,9 +8,10 @@ los incidentes críticos de manera asíncrona hacia servicios externos.
 
 import logging
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Generator, List, Union
+from typing import Generator, List, Optional, Union
 
 import cv2
 import numpy as np
@@ -33,6 +34,11 @@ settings = get_settings()
 
 class CameraService:
     """Coordina la captura de video en tiempo real y la ejecución del pipeline de IA."""
+
+    # Propiedades para el control para no saturar la API de Groq con demasiadas solicitudes simultáneas
+    _last_global_alert_time: float = 0.0
+    _global_cooldown_seconds: float = 60.0 # Maximo una alerta por minuto 
+    _global_cooldown_lock = threading.Lock()
 
     def __init__(
         self,
@@ -97,24 +103,47 @@ class CameraService:
         logger.warning(f"Cámara #{self.camera_id} - No hay stream configurado. Usando cámara local 0")
         return 0
 
-    def _should_emit_alert(self, track_id: Union[int, None]) -> bool:
+    def _should_emit_alert(self, track_id: Optional[int]) -> bool:
         """
         Verifica si se debe emitir una alerta basándose en una política de cooldown anti-spam.
 
+        Garantiza la protección de la API de Groq limitando el despacho a un máximo de
+        una alerta por minuto a nivel global en todo el sistema. Adicionalmente, verifica
+        que cada sujeto individual (track_id) haya cumplido su periodo de gracia particular.
+
         Args:
-            track_id (int, optional): Identificador del sujeto rastreado.
+            track_id (Optional[int]): Identificador único del sujeto en riesgo detectado por el modelo.
 
         Returns:
-            bool: True si la alerta puede ser despachada, False si está en periodo de gracia.
+            bool: True si la alerta supera con éxito los filtros de tiempo global e
+                  individual y puede ser procesada; False en caso contrario.
         """
-        if track_id is None:
+        current_time = time.time()
+
+        with CameraService._global_cooldown_lock:
+            
+            # Protección para no saturar la api de Groq
+            time_since_last_global_alert = current_time - CameraService._last_global_alert_time
+            if time_since_last_global_alert < CameraService._global_cooldown_seconds:
+                logger.debug(
+                    f"[COOLDOWN GLOBAL] Alerta omitida de forma preventiva. Restan "
+                    f"{CameraService._global_cooldown_seconds - time_since_last_global_alert:.1f}s "
+                    f"para liberar el uso de la API."
+                )
+                return False
+
+            # Validación de cooldown individual por track_id para evitar alertas duplicadas del mismo sujeto
+            if track_id is not None:
+                last_track_time = self._alert_cooldown.get(track_id, 0.0)
+                if current_time - last_track_time < self._alert_cooldown_seconds:
+                    return False
+
+            # Actualización de los timestamps de cooldown global e individual
+            CameraService._last_global_alert_time = current_time
+            if track_id is not None:
+                self._alert_cooldown[track_id] = current_time
+
             return True
-        current = time.time()
-        last = self._alert_cooldown.get(track_id, 0)
-        if current - last > self._alert_cooldown_seconds:
-            self._alert_cooldown[track_id] = current
-            return True
-        return False
     
     def _extract_focused_roi(self, frame: np.ndarray, bbox: List[int], padding_percentage: float = 0.45) -> np.ndarray:
         """

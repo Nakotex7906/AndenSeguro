@@ -21,6 +21,7 @@ settings = get_settings()
 class VisionService:
     """Gestiona la inferencia visual utilizando modelos de lenguaje multimodales."""
 
+    # Modelo activo y validado según la documentación actual de GroqCloud (Soporta imágenes hasta 20MB)
     MODEL_NAME = "qwen/qwen3.6-27b"
 
     def __init__(self):
@@ -98,10 +99,6 @@ class VisionService:
         Remueve de forma estricta los bloques de razonamiento interno (<think>...</think>)
         de la respuesta del modelo de lenguaje.
 
-        Utiliza expresiones regulares con soporte para truncamiento de tokens, asegurando
-        que si la etiqueta de cierre está ausente por falta de longitud en la respuesta,
-        se elimine todo el contenido remanente desde la apertura del tag.
-
         Args:
             raw_text (str): Texto bruto devuelto directamente por el LLM.
 
@@ -131,12 +128,15 @@ class VisionService:
         Returns:
             str: Reporte operativo resumido de máximo 3 líneas para el guardia de seguridad.
         """
+        # Mensaje de respaldo por si el modelo es cortado o la API no responde
+        default_fallback_msg = f"Alerta {alert_level.upper()}: Presencia de persona en zona de riesgo del andén."
+
         if not self.client:
             return f"Alerta {alert_level.upper()}: Intrusión detectada en zona de vías. (Modo simulación sin IA)"
 
         base64_image = self._convert_frame_to_base64(frame_roi)
         if not base64_image:
-            return "Alerta Crítica: Comportamiento de riesgo detectado en andén (Fallo de procesamiento visual)."
+            return f"Alerta {alert_level.upper()}: Comportamiento de riesgo detectado en andén (Fallo de procesamiento visual)."
 
         system_instruction = (
             "Eres un analista de seguridad táctico de la red de metro. Tu único objetivo "
@@ -177,7 +177,7 @@ class VisionService:
                     }
                 ],
                 temperature=0.2,
-                max_completion_tokens=512
+                max_completion_tokens=2048  
             )
 
             self._log_rate_limit_status(raw_response.headers)
@@ -187,12 +187,16 @@ class VisionService:
             
             clean_description = self._sanitize_ai_response(ia_description)
             
+            if not clean_description:
+                logger.warning("La respuesta quedó vacía tras la sanitización. Aplicando mensaje de respaldo.")
+                return default_fallback_msg
+            
             logger.info("Reporte operativo procesado y sanitizado exitosamente por VisionService.")
             return clean_description
 
         except Exception as error:
             logger.error(f"Fallo en la comunicación con la API de Groq Vision: {error}")
-            return f"Alerta {alert_level.upper()}: Persona en zona de peligro. Error al procesar rasgos con IA."
+            return default_fallback_msg
 
 
 vision_service = VisionService()
