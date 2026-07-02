@@ -22,6 +22,7 @@ def create_db_and_tables():
     """Crea todas las tablas definidas en los modelos SQLModel."""
     # Importar modelos para que SQLModel los registre en el metadata
     from app.models.incident import Incident  # noqa: F401
+    from app.models.incident_actions import IncidentAction, IncidentNote  # noqa: F401
     from app.models.station import Camera, Station  # noqa: F401
     from app.models.user import User  # noqa: F401
 
