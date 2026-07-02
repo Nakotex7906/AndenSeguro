@@ -4,22 +4,8 @@ import React, {
 } from 'react';
 import type { AuthState, AuthUser, LoginCredentials } from '../types/auth';
 
-const MOCK_USERS: Record<string, { password: string; user: AuthUser }> = {
-  'agente.essus': {
-    password: '1234',
-    user: {
-      id: '1', name: 'Agente R. Essus', username: 'agente.essus',
-      role: 'agent', badge: 'UNX-9928', assignment: 'Estación Central L1',
-    },
-  },
-  supervisor: {
-    password: 'admin',
-    user: {
-      id: '2', name: 'Supervisora M. Torres', username: 'supervisor',
-      role: 'supervisor', badge: 'SUP-0042', assignment: 'Centro de Control',
-    },
-  },
-};
+// Cambia esta URL por la IP/dominio real del backend en tu red
+const API_BASE = 'http://localhost:8000';
 
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
@@ -35,19 +21,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null, isAuthenticated: false, isLoading: false, error: null,
   });
 
+  // Guardamos el token en memoria (dentro del contexto) para usarlo en /me y otras llamadas
+  const [token, setToken] = useState<string | null>(null);
+
   const login = useCallback(async (credentials: LoginCredentials) => {
     setState(s => ({ ...s, isLoading: true, error: null }));
-    await new Promise(r => setTimeout(r, 800));
-    const match = MOCK_USERS[credentials.username.toLowerCase()];
-    if (match && match.password === credentials.password) {
-      setState({ user: match.user, isAuthenticated: true, isLoading: false, error: null });
-    } else {
-      setState(s => ({ ...s, isLoading: false, error: 'Usuario o contraseña incorrectos.' }));
+
+    try {
+      // 1. Obtener JWT
+      const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: credentials.username,
+          password: credentials.password,
+        }),
+      });
+
+      if (!loginRes.ok) {
+        const err = await loginRes.json().catch(() => ({}));
+        const msg = err?.detail ?? 'Usuario o contraseña incorrectos.';
+        setState(s => ({ ...s, isLoading: false, error: msg }));
+        return;
+      }
+
+      const { access_token } = await loginRes.json();
+      setToken(access_token);
+
+      // 2. Obtener datos del usuario autenticado
+      const meRes = await fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+
+      if (!meRes.ok) {
+        setState(s => ({ ...s, isLoading: false, error: 'Error al obtener el perfil.' }));
+        return;
+      }
+
+      const me = await meRes.json();
+
+      const user: AuthUser = {
+        id:       me.id,
+        fullName: me.full_name,
+        username: me.username,
+        role:     me.role,
+        isActive: me.is_active,
+      };
+
+      setState({ user, isAuthenticated: true, isLoading: false, error: null });
+    } catch (_) {
+      setState(s => ({ ...s, isLoading: false, error: 'No se pudo conectar con el servidor.' }));
     }
   }, []);
 
-  const logout = useCallback(() =>
-    setState({ user: null, isAuthenticated: false, isLoading: false, error: null }), []);
+  const logout = useCallback(() => {
+    setToken(null);
+    setState({ user: null, isAuthenticated: false, isLoading: false, error: null });
+  }, []);
 
   const updateProfile = useCallback((data: Partial<AuthUser>) =>
     setState(s => s.user ? { ...s, user: { ...s.user, ...data } } : s), []);

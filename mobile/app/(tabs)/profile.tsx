@@ -13,12 +13,7 @@ import { StatusPill } from '../../components/ui/StatusPill';
 import { useAuth } from '../../store/auth';
 import { Palette, FontSize, FontWeight, Space, Radius, Shadow } from '../../constants/theme';
 
-const ACTIVITY = [
-  { id: '1', type: 'alert'  as const, title: 'Alerta Crítica Atendida',  desc: 'Protocolo ejecutado con éxito en Estación Central.', time: '14:22' },
-  { id: '2', type: 'patrol' as const, title: 'Patrullaje Preventivo',     desc: 'Recorrido perimetral completado en Andén Sur.',       time: '13:05' },
-  { id: '3', type: 'report' as const, title: 'Reporte Enviado',           desc: 'Informe de turno transmitido al supervisor.',         time: '11:40' },
-];
-
+// Íconos y colores por tipo de actividad (estructura lista para conectar a API)
 const TYPE_ICON: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
   alert:  'alert-circle',
   patrol: 'walk',
@@ -30,13 +25,19 @@ const TYPE_COLOR: Record<string, string> = {
   report: Palette.textMuted,
 };
 
+// Rol legible en español
+const ROLE_LABEL: Record<string, string> = {
+  admin:          'Administrador',
+  jefe_estacion:  'Jefe de Estación',
+  seguridad:      'Seguridad',
+  operador:       'Operador',
+};
+
 export default function PerfilScreen() {
-  const { user, updateProfile, logout } = useAuth();
+  const { user, updateProfile } = useAuth();
 
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(user?.name ?? '');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState(user?.fullName ?? '');
   const [photoUri, setPhotoUri] = useState<string | undefined>(user?.photoUri);
   const [saving, setSaving] = useState(false);
 
@@ -84,16 +85,19 @@ export default function PerfilScreen() {
   const handleSave = async () => {
     setSaving(true);
     await new Promise(r => setTimeout(r, 600));
-    updateProfile({ name: name.trim(), photoUri });
+    updateProfile({ fullName: name.trim(), photoUri });
     setSaving(false);
     setEditing(false);
   };
 
   const handleCancel = () => {
-    setName(user?.name ?? '');
+    setName(user?.fullName ?? '');
     setPhotoUri(user?.photoUri);
     setEditing(false);
   };
+
+  const roleLabel = user?.role ? (ROLE_LABEL[user.role] ?? user.role) : '—';
+  const userId = user?.id ? `#${String(user.id).padStart(4, '0')}` : '—';
 
   return (
     <View style={styles.root}>
@@ -151,7 +155,7 @@ export default function PerfilScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Name / badge */}
+          {/* Nombre / ID */}
           {editing ? (
             <AppInput
               label="Nombre completo"
@@ -162,39 +166,18 @@ export default function PerfilScreen() {
             />
           ) : (
             <>
-              <Text style={styles.agentName}>{user?.name}</Text>
-              <Text style={styles.agentBadge}>ID: {user?.badge}</Text>
+              <Text style={styles.agentName}>{user?.fullName ?? '—'}</Text>
+              <Text style={styles.agentBadge}>ID: {userId}</Text>
             </>
           )}
 
-          {/* Assignment */}
+          {/* Rol */}
           <View style={styles.assignmentRow}>
-            <Ionicons name="navigate-outline" size={13} color={Palette.textDim} />
-            <Text style={styles.assignmentLabel}>ASIGNACIÓN</Text>
-            <Text style={styles.assignmentValue}>{user?.assignment}</Text>
+            <Ionicons name="shield-outline" size={13} color={Palette.textDim} />
+            <Text style={styles.assignmentLabel}>ROL</Text>
+            <Text style={styles.assignmentValue}>{roleLabel}</Text>
           </View>
         </View>
-
-        {/* Editable contact info */}
-        {editing && (
-          <View style={styles.contactGroup}>
-            <SectionLabel label="Información de contacto" />
-            <AppInput
-              label="Teléfono"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              icon={<Ionicons name="call-outline" size={14} color={Palette.textDim} />}
-            />
-            <AppInput
-              label="Correo electrónico"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              icon={<Ionicons name="mail-outline" size={14} color={Palette.textDim} />}
-            />
-          </View>
-        )}
 
         {/* Save / cancel */}
         {editing && (
@@ -208,52 +191,24 @@ export default function PerfilScreen() {
           </View>
         )}
 
-        {/* Metrics */}
+        {/* Métricas — pendiente de endpoint real */}
         {!editing && (
           <>
-            <View style={styles.metricsRow}>
-              <View style={styles.metricCell}>
-                <Text style={styles.metricValue}>142</Text>
-                <Text style={styles.metricLabel}>Intervenciones</Text>
-                <Text style={styles.metricSub}>+3 esta semana</Text>
-              </View>
-              <View style={styles.metricCell}>
-                <Text style={[styles.metricValue, { color: Palette.amber }]}>01:45</Text>
-                <Text style={styles.metricLabel}>Respuesta prom.</Text>
-                <Text style={styles.metricSub}>Nivel óptimo</Text>
-              </View>
+            <View style={styles.placeholderCard}>
+              <Ionicons name="stats-chart-outline" size={20} color={Palette.textDim} />
+              <Text style={styles.placeholderText}>
+                Las métricas de turno estarán disponibles cuando el backend exponga el endpoint de estadísticas del operador.
+              </Text>
             </View>
 
-            {/* Activity */}
-            <View style={styles.section}>
-              <SectionLabel label="Actividad reciente" />
-              <View style={styles.activityCard}>
-                {ACTIVITY.map((item, idx) => (
-                  <View key={item.id}>
-                    <View style={styles.activityRow}>
-                      <View style={[styles.activityIconWrap, { borderColor: TYPE_COLOR[item.type] }]}>
-                        <Ionicons name={TYPE_ICON[item.type]} size={13} color={TYPE_COLOR[item.type]} />
-                      </View>
-                      <View style={styles.activityContent}>
-                        <View style={styles.activityTitleRow}>
-                          <Text style={styles.activityTitle} numberOfLines={1}>{item.title}</Text>
-                          <Text style={styles.activityTime}>{item.time}</Text>
-                        </View>
-                        <Text style={styles.activityDesc} numberOfLines={2}>{item.desc}</Text>
-                      </View>
-                    </View>
-                    {idx < ACTIVITY.length - 1 && <View style={styles.divider} />}
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Report button */}
+            {/* Reporte */}
             <AppButton
               label="Generar reporte de turno"
               variant="outline"
               icon="document-text-outline"
-              onPress={() => {}}
+              onPress={() => {
+                Alert.alert('Próximamente', 'La generación de reportes estará disponible en la próxima versión.');
+              }}
             />
           </>
         )}
@@ -324,43 +279,23 @@ const styles = StyleSheet.create({
   },
   assignmentLabel: { fontSize: FontSize.xxs, fontWeight: FontWeight.bold, color: Palette.textDim, letterSpacing: 1, textTransform: 'uppercase' },
   assignmentValue: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Palette.textSecondary },
-  contactGroup: { gap: Space[3] },
   editActions: { flexDirection: 'row', gap: Space[2] },
   editActionBtn: { flex: 1 },
-  metricsRow: { flexDirection: 'row', gap: Space[2] },
-  metricCell: {
-    flex: 1,
-    backgroundColor: Palette.bg2,
-    borderWidth: 1,
-    borderColor: Palette.border1,
-    borderRadius: Radius.lg,
-    padding: 12,
-    gap: 2,
-  },
-  metricValue: { fontSize: FontSize['2xl'], fontWeight: FontWeight.bold, color: Palette.textPrimary, letterSpacing: -0.5 },
-  metricLabel: { fontSize: FontSize.xxs, color: Palette.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  metricSub:   { fontSize: FontSize.xxs, color: Palette.textDim, marginTop: 1 },
-  section: { gap: Space[2] },
-  activityCard: {
+  placeholderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: Palette.bg1,
     borderWidth: 1,
     borderColor: Palette.border0,
-    borderRadius: Radius.xl,
-    overflow: 'hidden',
+    borderRadius: Radius.lg,
+    padding: 14,
   },
-  activityRow: { flexDirection: 'row', gap: 12, padding: 14, alignItems: 'flex-start' },
-  activityIconWrap: {
-    width: 28, height: 28, borderRadius: Radius.sm,
-    borderWidth: 1,
-    backgroundColor: Palette.bg2,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
+  placeholderText: {
+    flex: 1,
+    fontSize: FontSize.xs,
+    color: Palette.textDim,
+    lineHeight: 18,
   },
-  activityContent: { flex: 1, gap: 3 },
-  activityTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  activityTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Palette.textSecondary, flex: 1, marginRight: 8 },
-  activityTime:  { fontSize: FontSize.xxs, color: Palette.textDim },
-  activityDesc:  { fontSize: FontSize.xs, color: Palette.textMuted, lineHeight: 16 },
-  divider: { height: 1, backgroundColor: Palette.border0, marginLeft: 14 },
   bottomPad: { height: 16 },
 });

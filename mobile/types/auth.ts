@@ -1,10 +1,9 @@
 export interface AuthUser {
-  id: string;
-  name: string;
+  id: number;
+  fullName: string;
   username: string;
-  role: 'agent' | 'supervisor' | 'admin';
-  badge: string;
-  assignment: string;
+  role: 'admin' | 'jefe_estacion' | 'seguridad' | 'operador';
+  isActive: boolean;
   photoUri?: string;
 }
 

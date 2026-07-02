@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import * as Brightness from 'expo-brightness';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,14 @@ import { Toggle } from '../../components/ui/Toggle';
 import { AppButton } from '../../components/ui/AppButton';
 import { useAuth } from '../../store/auth';
 import { Palette, FontSize, FontWeight, Space, Radius } from '../../constants/theme';
+
+// Rol legible en español (igual que en profile.tsx)
+const ROLE_LABEL: Record<string, string> = {
+  admin:          'Administrador',
+  jefe_estacion:  'Jefe de Estación',
+  seguridad:      'Seguridad',
+  operador:       'Operador',
+};
 
 function SettingRow({
   icon, title, subtitle, value, onValueChange, color,
@@ -55,6 +63,7 @@ function NavRow({
 export default function AjustesScreen() {
   const { logout, user } = useAuth();
   const router = useRouter();
+
   const [notifications, setNotifications] = useState(true);
   const [gps, setGps] = useState(true);
   const [vibration, setVibration] = useState(true);
@@ -71,6 +80,30 @@ export default function AjustesScreen() {
       }
     } catch (_) {}
   };
+
+  const handleAutoReport = (val: boolean) => {
+    setAutoReport(val);
+    // TODO: persistir preferencia con AsyncStorage y notificar al backend al cerrar turno
+    // await AsyncStorage.setItem('autoReport', JSON.stringify(val));
+  };
+
+  const handleNotifications = (val: boolean) => {
+    setNotifications(val);
+    // TODO: solicitar permisos reales con expo-notifications cuando esté disponible
+    // const { status } = await Notifications.requestPermissionsAsync();
+  };
+
+  // Ítem "Soporte técnico" — abre un Alert con contacto
+  const handleSoporte = () => {
+    Alert.alert(
+      'Soporte técnico',
+      'Contacta al equipo de soporte:\nsoporte@andenseguro.cl\n+56 2 2345 6789',
+      [{ text: 'Cerrar', style: 'cancel' }],
+    );
+  };
+
+  const roleLabel = user?.role ? (ROLE_LABEL[user.role] ?? user.role) : '—';
+  const userId = user?.id ? `#${String(user.id).padStart(4, '0')}` : '—';
 
   return (
     <View style={styles.root}>
@@ -92,8 +125,8 @@ export default function AjustesScreen() {
             <Ionicons name="person" size={22} color={Palette.textDim} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.accountName}>{user?.name}</Text>
-            <Text style={styles.accountBadge}>{user?.badge} · {user?.role}</Text>
+            <Text style={styles.accountName}>{user?.fullName ?? '—'}</Text>
+            <Text style={styles.accountBadge}>{userId} · {roleLabel}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={Palette.textDim} />
         </TouchableOpacity>
@@ -132,7 +165,7 @@ export default function AjustesScreen() {
             <SettingRow
               icon="notifications-outline" title="Alertas de intrusión"
               subtitle="Notificaciones de prioridad crítica"
-              value={notifications} onValueChange={setNotifications} color={Palette.blue}
+              value={notifications} onValueChange={handleNotifications} color={Palette.blue}
             />
             <View style={styles.divider} />
             <SettingRow
@@ -162,7 +195,7 @@ export default function AjustesScreen() {
             <SettingRow
               icon="document-text-outline" title="Reporte automático"
               subtitle="Generar reporte al cerrar turno"
-              value={autoReport} onValueChange={setAutoReport} color={Palette.green}
+              value={autoReport} onValueChange={handleAutoReport} color={Palette.green}
             />
           </View>
         </View>
@@ -174,16 +207,19 @@ export default function AjustesScreen() {
             <NavRow
               icon="document-lock-outline" title="Protocolos"
               subtitle="Ver manual de procedimientos"
-              onPress={() => {}}
+              onPress={() => router.push('/protocols' as any)}
             />
             <View style={styles.divider} />
             <NavRow
               icon="id-card-outline" title="Credenciales digitales"
               subtitle="Gestionar certificados operativos"
-              onPress={() => {}}
+              onPress={() => router.push('/credentials' as any)}
             />
             <View style={styles.divider} />
-            <NavRow icon="help-circle-outline" title="Soporte técnico" onPress={() => {}} />
+            <NavRow
+              icon="help-circle-outline" title="Soporte técnico"
+              onPress={handleSoporte}
+            />
             <View style={styles.divider} />
             <NavRow
               icon="information-circle-outline" title="Versión de la app"
