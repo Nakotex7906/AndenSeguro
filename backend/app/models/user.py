@@ -24,6 +24,7 @@ class User(SQLModel, table=True):
         description="Rol: admin | jefe_estacion | seguridad | operador",
     )
     is_active: bool = Field(default=True)
+    expo_push_token: Optional[str] = Field(default=None)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )

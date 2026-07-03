@@ -15,17 +15,35 @@ from app.models.incident import Incident
 logger = logging.getLogger(__name__)
 
 
+def _normalize_optional_string(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
 def create_incident(
     db: Session,
     camera_id: int,
     alert_level: str,
     description: str = "",
+    image_url: Optional[str] = None,
 ) -> Incident:
-    """Registra un nuevo incidente en la base de datos."""
+    """
+    Registra un nuevo incidente en la base de datos.
+
+    Args:
+        db: Sesión activa de la base de datos.
+        camera_id: ID de la cámara que detectó el incidente.
+        alert_level: Nivel de alerta (yellow | red).
+        description: Descripción opcional del incidente.
+        image_url: Enlace HTTP público del pantallazo almacenado en el servidor.
+    """
     incident = Incident(
         camera_id=camera_id,
         alert_level=alert_level,
         description=description,
+        image_url=_normalize_optional_string(image_url),
         timestamp=datetime.now(timezone.utc),
         status="pending",
     )

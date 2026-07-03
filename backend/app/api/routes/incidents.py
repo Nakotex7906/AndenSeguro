@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _incident_response(incident: Incident) -> IncidentResponse:
+    return IncidentResponse.model_validate(incident)
+
+
 @router.get("", response_model=IncidentListResponse)
 def get_incidents(
     db: Annotated[Session, Depends(get_db)],
@@ -64,7 +68,7 @@ def get_incidents(
     ).all()
 
     return IncidentListResponse(
-        items=[IncidentResponse.model_validate(item) for item in items],
+        items=[_incident_response(item) for item in items],
         total=total,
         page=page,
         size=size,
@@ -86,7 +90,7 @@ def create_manual_incident(
         alert_level="red",
         description="Alerta de emergencia activada manualmente por operador.",
     )
-    return incident
+    return _incident_response(incident)
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)
@@ -102,7 +106,7 @@ def get_incident(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Incidente no encontrado",
         )
-    return incident
+    return _incident_response(incident)
 
 
 @router.get("/{incident_id}/protocol-state")
@@ -130,7 +134,7 @@ def get_incident_protocol_state(
     ).all()
 
     return {
-        "incident": IncidentResponse.model_validate(incident).model_dump(),
+        "incident": _incident_response(incident).model_dump(),
         "actions": [a.model_dump() for a in actions],
         "notes": [n.model_dump() for n in notes]
     }
@@ -176,7 +180,7 @@ def update_incident_status(
         f"Incidente #{incident_id} actualizado a '{body.status}' "
         f"por {current_user.username}"
     )
-    return incident
+    return _incident_response(incident)
 
 
 @router.post("/{incident_id}/actions", response_model=IncidentActionResponse)

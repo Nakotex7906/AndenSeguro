@@ -6,10 +6,12 @@ inicialización de la base de datos y registro de todas las rutas.
 """
 
 import logging
+import os  
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles  
 
 from app.core.config import get_settings
 from app.core.exceptions import AndenSeguroException
@@ -39,6 +41,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+CURRENT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIRECTORY = os.path.join(CURRENT_DIRECTORY, "static")
+SNAPSHOTS_DIRECTORY = os.path.join(STATIC_DIRECTORY, "snapshots")
+
+os.makedirs(SNAPSHOTS_DIRECTORY, exist_ok=True)
+
+# Los archivos guardados en la carpeta física serán accesibles mediante HTTP 
+# bajo la ruta base: /static/snapshots/nombre_archivo.jpg
+app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
+logger.info(f"Directorio estático montado exitosamente en: {STATIC_DIRECTORY}")
 
 
 # --- Manejo Global de Excepciones ---
@@ -77,6 +90,7 @@ def on_startup():
     logger.info("Iniciando Andén Seguro API v2.0.0...")
     create_db_and_tables()
     _seed_superuser()
+    _seed_operational_agent()
     _seed_demo_stations()
     logger.info("Base de datos inicializada correctamente.")
 
@@ -102,43 +116,87 @@ def _seed_superuser():
             )
             db.add(admin)
             db.commit()
+            db.refresh(admin)
             logger.info(
                 "Superusuario 'admin' creado con password por defecto. "
                 "¡Cambiar en producción!"
             )
 
-
-def _seed_demo_stations():
-    """Crea estaciones y cámaras de demostración si la tabla está vacía."""
+def _seed_operational_agent():
+    """
+    Crea el agente operativo de pruebas si no existe en la base de datos.
+    """
+    from datetime import datetime, timezone
     from sqlmodel import Session, select
 
+    from app.core.security import get_password_hash
+    from app.db.session import engine
+    from app.models.user import User
+
+    with Session(engine) as db:
+        # Verificamos si el agente ya existe para no duplicar registros
+        existing_agent = db.exec(
+            select(User).where(User.username == "agente.essus")
+        ).first()
+
+        if not existing_agent:
+            agent = User(
+                username="agente.essus",
+                full_name="Agente R. Essus",
+                hashed_password=get_password_hash("1234"),  # Encriptación reglamentaria Bcrypt
+                role="agent",
+                is_active=True,  
+                created_at=datetime.now(timezone.utc),  
+            )
+            db.add(agent)
+            db.commit()
+            db.refresh(agent)
+            logger.info("Usuario semilla 'agente.essus' creado exitosamente para el entorno móvil.")
+
+def _seed_demo_stations():
+    """
+    Crea estaciones y cámaras de demostración vinculando de forma exacta los
+    archivos de video locales (.mp4) ubicados en la raíz del directorio backend.
+    """
+    from sqlmodel import Session, select
     from app.db.session import engine
     from app.models.station import Camera, Station
 
     with Session(engine) as db:
-        existing = db.exec(select(Station)).first()
-        if not existing:
-            for i in range(1, 4):
-                station = Station(
-                    name=f"Estación {i}",
-                    code=f"EST{i}",
-                    line=f"Línea {((i - 1) % 3) + 1}",
+        existing_fixtures = db.exec(select(Station)).first()
+        if not existing_fixtures:
+            
+            video_fixtures_mapping = {
+                1: "simulacion_calle.mp4",
+                2: "simulacion_calle_2.mp4",
+                3: "simulacion_calle_3.mp4"
+            }
+
+            for incremental_index in range(1, 4):
+                new_station_fixture = Station(
+                    name=f"Estación {incremental_index}",
+                    code=f"EST{incremental_index}",
+                    line=f"Línea {((incremental_index - 1) % 3) + 1}",
                 )
-                db.add(station)
+                db.add(new_station_fixture)
                 db.commit()
-                db.refresh(station)
+                db.refresh(new_station_fixture)
 
-                camera = Camera(
-                    station_id=station.id,
-                    label=f"Cámara Andén {i}",
-                    serial="",
+                resolved_stream_source = video_fixtures_mapping.get(
+                    incremental_index, 
+                    "simulacion_calle.mp4"
                 )
-                db.add(camera)
-            db.commit()
-            logger.info(
-                "Estaciones y cámaras de demostración creadas (Estación 1-3)"
-            )
 
+                new_camera_fixture = Camera(
+                    station_id=new_station_fixture.id,
+                    label=f"Cámara Andén {incremental_index}",
+                    serial=f"SN-000{incremental_index}X",
+                    stream_url=resolved_stream_source  # Columna física alineada con el modelo
+                )
+                db.add(new_camera_fixture)
+                
+            db.commit()
+            logger.info("Estaciones y cámaras de demostración vinculadas a los videos MP4 reales de la raíz.")
 
 # --- Registro de Rutas ---
 from app.api.routes import auth, dashboard, incidents, stream, alerts  # noqa: E402
