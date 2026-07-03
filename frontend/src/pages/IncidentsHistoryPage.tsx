@@ -20,8 +20,8 @@ interface IncidentResponse {
 interface IncidentListResponse {
   items: IncidentResponse[]
   total: number
-  page: int
-  size: int
+  page: number
+  size: number
 }
 
 export function IncidentsHistoryPage({ onViewChange }: { onViewChange?: (view: ViewId) => void }): ReactElement {
@@ -82,7 +82,7 @@ export function IncidentsHistoryPage({ onViewChange }: { onViewChange?: (view: V
         </div>
       </div>
 
-      <Panel>
+      <Panel title="Historial de Emergencias">
         {/* Toolbar / Filters */}
         <div className="flex gap-3 mb-4">
           <select 

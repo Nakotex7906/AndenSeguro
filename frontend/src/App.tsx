@@ -10,6 +10,7 @@ import { LoginPage } from './pages/LoginPage'
 import { ProtocolsPage } from './pages/ProtocolsPage'
 import { UsersPage } from './pages/UsersPage'
 import type { ViewId } from './types/dashboard'
+import { AlertsPage } from './pages/AlertsPage'
 
 function App(): ReactElement {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
@@ -55,6 +56,7 @@ function App(): ReactElement {
     activeView === 'camera'    ? <LiveCameraPage onViewChange={handleViewChange} /> :
     activeView === 'protocols' ? <ProtocolsPage /> :
     activeView === 'history'   ? <IncidentsHistoryPage onViewChange={handleViewChange} /> :
+    activeView === 'alerts'    ? <AlertsPage /> :
     activeView === 'users' && userRole === 'admin' ? <UsersPage /> :
     <ComingSoonPage viewId={activeView} />
 
